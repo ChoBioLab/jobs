@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J cr_multi
+#BSUB -J cr_count
 #BSUB -P acc_untreatedIBD
 #BSUB -W 02:00
 #BSUB -q express
@@ -10,25 +10,27 @@
 #BSUB -eo ../logs/error_%J.stderr
 #BSUB -L /bin/bash
 
-COUNT=8 		# number of samples
+# number of samples
+COUNT=8 	
 REF_DIR=/hpc/users/tastac01/ctastad/ref_genomes/10x
-ANALYSIS_DIR=/hpc/users/tastac01/ctastad/projects/conv_covid_seq/analysis
+GENE_REF=refdata-gex-GRCh38-2020-A
+ANALYSIS_OUT=/hpc/users/tastac01/ctastad/projects/conv_covid_seq/analysis
 SAMPLE_DIR=/hpc/users/tastac01/ctastad/projects/conv_covid_seq/data/fastqs
 
 module load cellranger parallel
-cd $ANALYSIS_DIR
+mkdir $ANALYSIS_OUT/cr_count_`date '+%F_%H%M'` && cd $_
 
-## direct path of config cs should be give as first argument
+# core cellranger function
 cr_count () {
   cellranger count \
     --id=cr_count_$1_`date '+%F_%H%M'` \
-    --transcriptome=$REF_DIR/refdata-gex-GRCh38-2020-A \
-    --fastqs=SAMPLE_DIR \
+    --transcriptome=$REF_DIR/$GENE_REF \
+    --fastqs=$SAMPLE_DIR \
     --sample=$1-GEX \
 }
 
-export -f cr_count	# export cr function to env for parallel
+# export cr function to env for parallel
+export -f cr_count	
 
 # execute cellranger in parallel
 find TD005310-CP-* | cut -d. -f1 | parallel cr_count {}
-
