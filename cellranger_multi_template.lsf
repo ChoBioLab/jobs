@@ -12,9 +12,9 @@
 
 # params
 COUNT=8 		# number of samples
-PROJ_DIR=/hpc/users/tastac01/ctastad/projects/conv_covid_seq
-REF_DIR=/hpc/users/tastac01/ctastad/ref_genomes/10x
-GENE_REF=refdata-gex-GRCh38-2020-A
+PROJ_DIR=/path/to/proj/dir
+REF_DIR=/path/to/gene/refs
+GENE_REF=name_of_gene_ref
 ANALYSIS_OUT=$PROJ_DIR/analysis/cr_multi_`date '+%F_%H%M'`
 SAMPLE_DIR=$PROJ_DIR/data/fastqs
 CONFIG_DIR=$PROJ_DIR/analysis
