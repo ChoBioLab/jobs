@@ -1,0 +1,16 @@
+#!/bin/bash
+#BSUB -J job_of_chris
+#BSUB -P acc_untreatedIBD
+#BSUB -W 00:15
+#BSUB -q express
+#BSUB -n 1
+#BSUB -R rusage[mem=4GB]
+#BSUB -R span[host=lc03g10]
+#BSUB -u christopher.tastad@mssm.edu
+#BSUB -o ../logs/output_%J.stdout
+#BSUB -eo ../logs/error_%J.stderr
+#BSUB -L /bin/bash
+
+cd $HOME
+TOUCH test4.txt
+touch test5.txt
