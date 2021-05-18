@@ -1,0 +1,34 @@
+#!/bin/bash
+#BSUB -J cr_count
+#BSUB -P acc_untreatedIBD
+#BSUB -W 02:00
+#BSUB -q express
+#BSUB -n 2
+#BSUB -R rusage[mem=64GB]
+#BSUB -R span[hosts=1]
+#BSUB -o ../logs/output_%J.stdout
+#BSUB -eo ../logs/error_%J.stderr
+#BSUB -L /bin/bash
+
+# params
+COUNT=8                 # number of samples
+PIPELINE=cellranger_pipeline
+PROJ_DIR=/path/to/proj/dir
+REF_DIR=/path/to/gene/refs
+GENE_REF=name_of_gene_ref
+ANALYSIS_OUT=$PROJ_DIR/analysis/cr_$PIPELINE_`date '+%F_%H%M'`
+SAMPLE_DIR=$PROJ_DIR/data/fastqs
+SAMPLE=sample_name
+
+################################################################################
+
+module load cellranger parallel
+mkdir $ANALYSIS_OUT && cd $_
+
+# core cellranger function
+cellranger $PIPELINE \
+  --id=cr_$PIPELINE_`date '+%F_%H%M'` \
+  --transcriptome=$REF_DIR/$GENE_REF \
+  --fastqs=$SAMPLE_DIR \
+  --sample=$SAMPLE
+

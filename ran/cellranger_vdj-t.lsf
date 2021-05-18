@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J cr_count
+#BSUB -J cr_vdj-t
 #BSUB -P acc_untreatedIBD
 #BSUB -W 02:00
 #BSUB -q express
@@ -12,12 +12,12 @@
 
 # params
 COUNT=8                 # number of samples
-PROJ_DIR=/path/to/proj/dir
-REF_DIR=/path/to/gene/refs
-GENE_REF=name_of_gene_ref
-ANALYSIS_OUT=$PROJ_DIR/analysis/cr_count_`date '+%F_%H%M'`
+PROJ_DIR=/hpc/users/tastac01/ctastad/projects/conv_covid_seq
+REF_DIR=/hpc/users/tastac01/ctastad/ref_genomes/10x
+GENE_REF=refdata-cellranger-vdj-GRCh38-alts-ensembl-5.0.0
+ANALYSIS_OUT=$PROJ_DIR/analysis/cr_vdj_`date '+%F_%H%M'`
 SAMPLE_DIR=$PROJ_DIR/data/fastqs
-SAMPLE=sample_name
+SAMPLE=TD005310-CP-2-TCR
 
 ################################################################################
 
@@ -25,9 +25,9 @@ module load cellranger parallel
 mkdir $ANALYSIS_OUT && cd $_
 
 # core cellranger function
-cellranger count \
-  --id=cr_count_$1_`date '+%F_%H%M'` \
-  --transcriptome=$REF_DIR/$GENE_REF \
+cellranger vdj \
+  --id=cr_vdj_`date '+%F_%H%M'` \
+  --reference=$REF_DIR/$GENE_REF \
   --fastqs=$SAMPLE_DIR \
   --sample=$SAMPLE
 
