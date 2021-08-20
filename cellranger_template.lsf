@@ -23,8 +23,9 @@ SAMPLE_DIR=$PROJ_DIR/   # /proj/subdir/to/fastqs
 
 ################################################################################
 
-module load cellranger parallel
+module load cellranger
 
+# needed because pipelines differe for name of reference genome
 if [[ $PIPELINE == "count" ]]
 then
     GENOME_LABEL=transcriptome
@@ -33,15 +34,12 @@ else
 fi
 
 # core cellranger function
-for i in *
-#for i in $(seq 1 $COUNT)
+for i in $SAMPLE_DIR/*
 do
-echo "
 cellranger $PIPELINE \
-  --id=cr_$PIPELINE_$i_`date '+%F_%H%M'` \
+  --id=cr_${PIPELINE}_${i##*/}_`date '+%F_%H%M'` \
   --$GENOME_LABEL=$REF_DIR/$GENE_REF \
-  --fastqs=$SAMPLE_DIR \
-  #--sample=$SAMPLE_PREFIX
-  --sample=$i
-"
+  --fastqs=$SAMPLE_DIR/${i##*/} \
+  --sample=${i##*/}
 done
+
