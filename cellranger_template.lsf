@@ -10,25 +10,38 @@
 #BSUB -eo ../logs/error_%J.stderr
 #BSUB -L /bin/bash
 
+# this script should be executed from site of output dir
+# fastqs should be arranged in dirs arranged by sample
+# dirs should carry sample name
+
 # params
-COUNT=8                 # number of samples
-PIPELINE=cellranger_pipeline
-PROJ_DIR=/path/to/proj/dir
-REF_DIR=/path/to/gene/refs
-GENE_REF=name_of_gene_ref
-ANALYSIS_OUT=$PROJ_DIR/analysis/cr_$PIPELINE_`date '+%F_%H%M'`
-SAMPLE_DIR=$PROJ_DIR/data/fastqs
-SAMPLE=sample_name
+PIPELINE=               # name of cr pipeline
+PROJ_DIR=               # /path/to/proj/dir
+REF_DIR=                # /path/to/gene/refs
+GENE_REF=               # name of gene ref
+SAMPLE_DIR=$PROJ_DIR/   # /proj/subdir/to/fastqs
 
 ################################################################################
 
 module load cellranger parallel
-mkdir $ANALYSIS_OUT && cd $_
+
+if [[ $PIPELINE == "count" ]]
+then
+    GENOME_LABEL=transcriptome
+else
+    GENOME_LABEL=reference
+fi
 
 # core cellranger function
+for i in *
+#for i in $(seq 1 $COUNT)
+do
+echo "
 cellranger $PIPELINE \
-  --id=cr_$PIPELINE_`date '+%F_%H%M'` \
-  --transcriptome=$REF_DIR/$GENE_REF \
+  --id=cr_$PIPELINE_$i_`date '+%F_%H%M'` \
+  --$GENOME_LABEL=$REF_DIR/$GENE_REF \
   --fastqs=$SAMPLE_DIR \
-  --sample=$SAMPLE
-
+  #--sample=$SAMPLE_PREFIX
+  --sample=$i
+"
+done
