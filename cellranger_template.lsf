@@ -14,18 +14,20 @@
 # fastqs should be arranged in dirs arranged by sample
 # dirs should carry sample name
 
+set -a
+
 # params
-PIPELINE=               # name of cr pipeline
-PROJ_DIR=               # /path/to/proj/dir
-REF_DIR=                # /path/to/gene/refs
-GENE_REF=               # name of gene ref
-SAMPLE_DIR=$PROJ_DIR/   # /proj/subdir/to/fastqs
+PIPELINE=			# name of cellranger pipeline
+PROJ_DIR=			# /path/to/proj/dir
+REF_DIR=			# /path/to/gene/ref
+GENE_REF=			# name of gene ref
+SAMPLE_DIR=$PROJ_DIR/		# /proj/subdir/to/fastqs
+CELLS=				# expected cell count
+CHEM=				# chemistry type (e.g. fiveprime)
 
 ################################################################################
 
-module load cellranger
-
-# needed because pipelines differe for name of reference genome
+# needed because pipelines differ for name of reference genome
 if [[ $PIPELINE == "count" ]]
 then
     GENOME_LABEL=transcriptome
@@ -34,12 +36,19 @@ else
 fi
 
 # core cellranger function
-for i in $SAMPLE_DIR/*
-do
+crProcess () {
 cellranger $PIPELINE \
-  --id=cr_${PIPELINE}_${i##*/}_`date '+%F_%H%M'` \
+  --id=cr_${PIPELINE}_${1}_`date '+%F_%H%M'` \
   --$GENOME_LABEL=$REF_DIR/$GENE_REF \
-  --fastqs=$SAMPLE_DIR/${i##*/} \
-  --sample=${i##*/}
-done
+  --fastqs=$SAMPLE_DIR/$1 \
+  --sample=$1 \
+  --expect-cells=$CELLS \
+  --chemistry=$CHEM
+}
+#done
+
+export -f crProcess
+
+# cellranger function run with gnuparallel
+parallel crProcess ::: $(ls $SAMPLE_DIR)
 
