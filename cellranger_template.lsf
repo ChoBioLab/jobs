@@ -35,20 +35,37 @@ else
     GENOME_LABEL=reference
 fi
 
+OUT_DIR=cr_${PIPELINE}_`date '+%F_%H%M'`
+mkdir $OUT_DIR
+cd $OUT_DIR
+
 # core cellranger function
 crProcess () {
-cellranger $PIPELINE \
-  --id=cr_${PIPELINE}_${1}_`date '+%F_%H%M'` \
-  --$GENOME_LABEL=$REF_DIR/$GENE_REF \
-  --fastqs=$SAMPLE_DIR/$1 \
-  --sample=$1 \
-  --expect-cells=$CELLS \
-  --chemistry=$CHEM
-}
+    cellranger $PIPELINE \
+        --id=$1 \
+        --$GENOME_LABEL=$REF_DIR/$GENE_REF \
+        --fastqs=$SAMPLE_DIR/$1 \
+        --sample=$1 \
+        --expect-cells=$CELLS \
+        --chemistry=$CHEM
+    }
 #done
 
 export -f crProcess
 
 # cellranger function run with gnuparallel
 parallel crProcess ::: $(ls $SAMPLE_DIR)
+
+# run cellranger summarizer
+cd $(ls -d */ | head -n 1)
+head -n 1 outs/metrics_summary.csv > ../combined_metrics.csv
+cd ../
+sed -i 's/^/Sample,/' combined_metrics.csv
+
+for i in $(/bin/ls -d */)
+do
+    LABEL=$(echo $i | sed 's/\///g')
+    METRICS=$(tail -n 1 $i/outs/metrics_summary.csv)
+    echo "${LABEL},${METRICS}" >> combined_metrics.csv
+done
 
