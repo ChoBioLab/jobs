@@ -10,9 +10,10 @@
 #BSUB -eo ../logs/error_%J.stderr
 #BSUB -L /bin/bash
 
+# README
 # this script should be executed from site of output dir
-# fastqs should be arranged in dirs arranged by sample
-# dirs should carry sample name
+# fastqs should be arranged in dirs labeled by sample
+# make note not to leave trailing / in param paths
 
 set -a
 
@@ -36,8 +37,8 @@ else
 fi
 
 OUT_DIR=cr_${PIPELINE}_`date '+%F_%H%M'`
-mkdir $OUT_DIR
-cd $OUT_DIR
+mkdir -p $PROJ_DIR/cellranger/$OUT_DIR
+cd $PROJ_DIR/cellranger/$OUT_DIR
 
 # core cellranger function
 crProcess () {
