@@ -1,0 +1,59 @@
+#!/bin/bash
+#BSUB -J cr_count
+#BSUB -P acc_untreatedIBD
+#BSUB -W 02:00
+#BSUB -q express
+#BSUB -n 2
+#BSUB -R rusage[mem=64GB]
+#BSUB -R span[hosts=1]
+#BSUB -o ../logs/output_%J.stdout
+#BSUB -eo ../logs/error_%J.stderr
+#BSUB -L /bin/bash
+
+# README
+# this script should be executed from site of output dir
+# fastqs should be arranged in dirs labeled by sample
+# make note not to leave trailing / in param paths
+
+set -a
+
+# params
+PIPELINE=			        # name of cellranger pipeline
+PROJ_DIR=			        # /path/to/proj/dir
+REF_DIR=			        # /path/to/gene/ref
+GENE_REF=			        # name of gene ref
+SAMPLE_DIR=$PROJ_DIR/		# /proj/subdir/to/fastqs
+
+################################################################################
+
+OUT_DIR=cr_${PIPELINE}_`date '+%F_%H%M'`
+mkdir -p $PROJ_DIR/analysis/cellranger/$OUT_DIR
+cd $PROJ_DIR/analysis/cellranger/$OUT_DIR
+
+# core cellranger function
+crProcess () {
+    cellranger-atac $PIPELINE \
+        --id=$1 \
+        --reference=$REF_DIR/$GENE_REF \
+        --fastqs=$SAMPLE_DIR/$1 \
+        --sample=$1
+    }
+
+export -f crProcess
+
+# cellranger function run with gnuparallel
+parallel crProcess ::: $(ls $SAMPLE_DIR)
+
+## run cellranger summarizer
+#cd $(ls -d */ | head -n 1)
+#head -n 1 outs/metrics_summary.csv > ../combined_metrics.csv
+#cd ../
+#sed -i 's/^/Sample,/' combined_metrics.csv
+#
+#for i in $(/bin/ls -d */)
+#do
+#    LABEL=$(echo $i | sed 's/\///g')
+#    METRICS=$(tail -n 1 ${i}outs/metrics_summary.csv)
+#    echo "${LABEL},${METRICS}" >> combined_metrics.csv
+#done
+#
