@@ -22,11 +22,11 @@ PIPELINE=			        # name of cellranger pipeline
 PROJ_DIR=			        # /path/to/proj/dir
 REF_DIR=			        # /path/to/gene/ref
 GENE_REF=			        # name of gene ref
-LIBS=					# /path/to/libraries.csv
+LIBS=$PROJ_DIR				# /path/to/libraries.csv
 
 ################################################################################
 
-OUT_DIR=cr_atac_${PIPELINE}_`date '+%F_%H%M'`
+OUT_DIR=cr_arc_${PIPELINE}_`date '+%F_%H%M'`
 mkdir -p $PROJ_DIR/analysis/cellranger/$OUT_DIR
 cd $PROJ_DIR/analysis/cellranger/$OUT_DIR
 
@@ -36,6 +36,5 @@ cellranger-arc $PIPELINE \
     --reference=$REF_DIR/$GENE_REF \
     --libraries=$LIBS
 
-# cellranger function run with gnuparallel
-# parallel crProcess ::: $(ls $SAMPLE_DIR)
+mv $LIBS .
 
