@@ -35,12 +35,13 @@ crProcess () {
         --id=$(echo $1 | sed 's/_libraries.csv//') \
         --reference=$REF_DIR/$GENE_REF \
         --libraries=$LIB_DIR/$1
-
-    mv $LIB_DIR/$1 .
-}
+    }
 
 export -f crProcess
 
 # cellranger function run with gnuparallel
-parallel crProcess ::: $(ls $LIB_DIR/*_libraries.csv | xargs -n 1 basename)
+TARGETS=$(ls $LIB_DIR/*_libraries.csv | xargs -n 1 basename)
+parallel crProcess ::: $TARGETS
+
+mv $LIB_DIR/*_libraries.csv .
 
