@@ -32,7 +32,7 @@ mkdir -p $PROJ_DIR/analysis/cellranger/$OUT_DIR && cd $_
 # core cellranger function
 crProcess () {
     cellranger-arc $PIPELINE \
-        --id=$(echo $1 | cut -d '_' -f1) \
+        --id=$(echo $1 | sed 's/_libraries.csv//') \
         --reference=$REF_DIR/$GENE_REF \
         --libraries=$LIB_DIR/$1
 
