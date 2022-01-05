@@ -48,7 +48,7 @@ crProcess () {
         --sample=$1 \
         --expect-cells=$CELLS \
         --chemistry=$CHEM \
-        --no-bam=true
+        --no-bam=false
     }
 #done
 
