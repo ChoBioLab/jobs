@@ -20,13 +20,7 @@ set -a
 # params
 PROJ_DIR=		# /path/to/proj/dir
 SAMPLE_DIR=$PROJ_DIR/	# /proj/subdir/to/fastqs
-R1=			# /path/to/R1.fastq
-R2=			# /path/to/R2.fastq
 T=			# /path/to/tags.csv
-CBF=			# first position barcode
-CBL=			# last position barcode
-UMIF=			# first position umi
-UMIL=			# last position umi
 CELLS=			# expected cell count
 
 ################################################################################
@@ -42,10 +36,10 @@ csProcess () {
 		-R1 $SAMPLE_DIR/$1/*_R1_*.fastq.gz \
 		-R2 $SAMPLE_DIR/$1/*_R2_*.fastq.gz \
 		-t $T \
-		-cbf $CBF \
-		-cbl $CBL \
-		-umif $UMIF \
-		-umil $UMIL \
+		-cbf 1 \
+		-cbl 16 \
+		-umif 17 \
+		-umil 26 \
 		-cells $CELLS \
 		-o $1
 	}
@@ -56,3 +50,4 @@ export -f csProcess
 # cellranger function run with gnuparallel
 parallel csProcess ::: $(ls $SAMPLE_DIR)
 
+mv $T .
