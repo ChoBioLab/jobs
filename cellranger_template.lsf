@@ -55,7 +55,7 @@ crProcess () {
 export -f crProcess
 
 # cellranger function run with gnuparallel
-parallel crProcess ::: $(ls $SAMPLE_DIR)
+parallel -j 8 crProcess ::: $(ls $SAMPLE_DIR)
 
 # run cellranger summarizer
 cd $(ls -d */ | head -n 1)
