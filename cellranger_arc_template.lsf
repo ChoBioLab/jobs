@@ -41,7 +41,7 @@ export -f crProcess
 
 # cellranger function run with gnuparallel
 TARGETS=$(ls $LIB_DIR/*_libraries.csv | xargs -n 1 basename)
-parallel crProcess ::: $TARGETS
+parallel -j 8 crProcess ::: $TARGETS
 
 mv $LIB_DIR/*_libraries.csv .
 
