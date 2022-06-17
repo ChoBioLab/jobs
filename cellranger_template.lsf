@@ -47,8 +47,7 @@ crProcess () {
         --fastqs=$SAMPLE_DIR/$1 \
         --sample=$1 \
         --expect-cells=$CELLS \
-        --chemistry=$CHEM \
-        --no-bam=false
+        --chemistry=$CHEM
     }
 #done
 
