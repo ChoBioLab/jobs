@@ -10,6 +10,13 @@
 #BSUB -eo ../logs/error_%J.stderr
 #BSUB -L /bin/bash
 
+# VELOCYTO MINERVA PARAMS
+# module load anaconda3
+# ml python/3.7.3
+# ml velocyto
+# source activate /hpc/packages/minerva-centos7/velocyto/0.17/velocyto
+# ml samtools
+
 # README
 # this script should be executed from site of output dir
 # fastqs should be arranged in dirs labeled by sample
@@ -20,11 +27,12 @@ set -a
 # params
 PIPELINE=			        # name of cellranger pipeline
 PROJ_DIR=			        # /path/to/proj/dir
-REF_DIR=			        # /path/to/gene/ref
-GENE_REF=			        # name of gene ref
+REF_DIR=                    # /path/to/gene/ref
+GENE_REF=                   # name of gene ref
 SAMPLE_DIR=$PROJ_DIR/		# /proj/subdir/to/fastqs
 CELLS=				        # expected cell count
 CHEM=auto			        # chemistry type (e.g. fiveprime)
+MEM=                        # memory cap
 
 ################################################################################
 
@@ -36,10 +44,10 @@ else
     GENOME_LABEL=reference
 fi
 
-OUT_DIR=cr_${PIPELINE}_`date '+%F_%H%M'`
-mkdir -p $PROJ_DIR/analysis/cellranger/$OUT_DIR && cd $_
+OUT_DIR=$PROJ_DIR/analysis/cellranger/cr_${PIPELINE}_`date '+%F_%H%M'`
+mkdir -p $OUT_DIR && cd $_
 
-# core cellranger function
+# cellranger function
 crProcess () {
     cellranger $PIPELINE \
         --id=$1 \
@@ -47,14 +55,22 @@ crProcess () {
         --fastqs=$SAMPLE_DIR/$1 \
         --sample=$1 \
         --expect-cells=$CELLS \
-        --chemistry=$CHEM
+        --chemistry=$CHEM \
+        --localmem=$MEM
     }
-#done
+
+# velocyto function
+vcProcess () {
+    velocyto run10x \
+        $OUT_DIR/$1 \
+        $REF_DIR/$GENE_REF/genes/genes.gtf
+    }
 
 export -f crProcess
+export -f vcProcess
 
-# cellranger function run with gnuparallel
-parallel -j 8 crProcess ::: $(ls $SAMPLE_DIR)
+# cellranger execution with gnuparallel
+parallel crProcess ::: $(ls $SAMPLE_DIR)
 
 # run cellranger summarizer
 cd $(ls -d */ | head -n 1)
@@ -68,4 +84,10 @@ do
     METRICS=$(tail -n 1 ${i}outs/metrics_summary.csv)
     echo "${LABEL},${METRICS}" >> combined_metrics.csv
 done
+
+source $HOME/miniconda3/etc/profile.d/conda.sh
+conda activate velocyto
+
+# velocyto execution with gnuparallel
+parallel vcProcess ::: $(find $OUT_DIR -mindepth 1 -maxdepth 1 -type d -printf '%f\n')
 
