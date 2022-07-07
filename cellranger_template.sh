@@ -36,6 +36,9 @@ MEM=                        # memory cap
 
 ################################################################################
 
+exec >> cr_${PIPELINE}_`date '+%F_%H%M'`.log
+exec 2>&1
+
 # needed because pipelines differ for name of reference genome
 if [[ $PIPELINE == "count" ]]
 then
