@@ -56,7 +56,7 @@ crProcess () {
         --id=$1 \
         --$GENOME_LABEL=$REF_DIR/$GENE_REF \
         --fastqs=$SAMPLE_DIR/$1 \
-        --sample=$1 \
+        --sample=$(ls SAMPLE_DIR/$1 | head -1 | cut -f1 -d "_") \
         --expect-cells=$CELLS \
         --chemistry=$CHEM \
         --localmem=$MEM
