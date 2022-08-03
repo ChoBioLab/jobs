@@ -19,7 +19,7 @@
 
 # README
 # this script should be executed from site of output dir
-# fastqs should be arranged in dirs labeled by sample
+# fastqs should be arranged in dirs labeled using the Standard ID
 # make note not to leave trailing / in param paths
 
 set -a
