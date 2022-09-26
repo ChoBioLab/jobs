@@ -48,3 +48,15 @@ parallel -j 16 crProcess ::: $TARGETS
 
 mv $LIB_DIR/*_libraries.csv .
 
+# run cellranger summarizer
+cd $(ls -d */ | head -n 1)
+head -n 1 outs/summary.csv > ../combined_metrics.csv
+cd ../
+sed -i 's/^/Sample,/' combined_metrics.csv
+
+for i in $(/bin/ls -d */)
+do
+    LABEL=$(echo $i | sed 's/\///g')
+    METRICS=$(tail -n 1 ${i}outs/summary.csv)
+    echo "${LABEL},${METRICS}" >> combined_metrics.csv
+done
