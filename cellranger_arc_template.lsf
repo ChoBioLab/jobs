@@ -26,6 +26,9 @@ LIB_DIR=$PROJ_DIR			# DIR containing libraries.csv
 
 ################################################################################
 
+exec >> cr_${PIPELINE}_`date '+%F_%H%M'`.log
+exec 2>&1
+
 OUT_DIR=cr_arc_${PIPELINE}_`date '+%F_%H%M'`
 mkdir -p $PROJ_DIR/analysis/cellranger/$OUT_DIR && cd $_
 
@@ -41,7 +44,7 @@ export -f crProcess
 
 # cellranger function run with gnuparallel
 TARGETS=$(ls $LIB_DIR/*_libraries.csv | xargs -n 1 basename)
-parallel -j 8 crProcess ::: $TARGETS
+parallel -j 16 crProcess ::: $TARGETS
 
 mv $LIB_DIR/*_libraries.csv .
 
