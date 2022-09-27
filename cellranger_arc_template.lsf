@@ -23,6 +23,8 @@ PROJ_DIR=			        # /path/to/proj/dir
 REF_DIR=			        # /path/to/gene/ref
 GENE_REF=			        # name of gene ref
 LIB_DIR=$PROJ_DIR			# DIR containing libraries.csv
+MEM=                        # memory cap
+CORES=                      # core cap
 
 ################################################################################
 
@@ -37,14 +39,16 @@ crProcess () {
     cellranger-arc $PIPELINE \
         --id=$(echo $1 | sed 's/_libraries.csv//') \
         --reference=$REF_DIR/$GENE_REF \
-        --libraries=$LIB_DIR/$1
+        --libraries=$LIB_DIR/$1 \
+        --localmem=$MEM \
+        --localcores=$CORES
     }
 
 export -f crProcess
 
 # cellranger function run with gnuparallel
 TARGETS=$(ls $LIB_DIR/*_libraries.csv | xargs -n 1 basename)
-parallel -j 16 crProcess ::: $TARGETS
+parallel -j 8 crProcess ::: $TARGETS
 
 mv $LIB_DIR/*_libraries.csv .
 
