@@ -33,6 +33,7 @@ SAMPLE_DIR=$PROJ_DIR/		# /proj/subdir/to/fastqs
 CELLS=				        # expected cell count
 CHEM=auto			        # chemistry type (e.g. fiveprime)
 MEM=                        # memory cap
+CORES=                      # core cap
 
 ################################################################################
 
@@ -59,7 +60,8 @@ crProcess () {
         --sample=$(ls $SAMPLE_DIR/$1 | head -1 | cut -f1 -d "_") \
         --expect-cells=$CELLS \
         --chemistry=$CHEM \
-        --localmem=$MEM
+        --localmem=$MEM \
+        --localcores=$CORES
     }
 
 # velocyto function
