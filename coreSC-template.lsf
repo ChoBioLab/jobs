@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -J job_of_chris
+#BSUB -J coresc
 #BSUB -P acc_untreatedIBD
 #BSUB -W 01:00
 #BSUB -q express
@@ -7,9 +7,12 @@
 #BSUB -R span[ptile=4]
 #BSUB -R rusage[mem=12000]
 #BSUB -u christopher.tastad@mssm.edu
-#BSUB -o /hpc/users/tastac01/ctastad/logs/output_%J.stdout
-#BSUB -eo /hpc/users/tastac01/ctastad/logs/error_%J.stderr
+#BSUB -o output_%J.stdout
+#BSUB -eo error_%J.stderr
 #BSUB -L /bin/bash
+
+# README
+# This script should be executed from the site of the output dir
 
 export http_proxy=http://172.28.7.1:3128
 export https_proxy=http://172.28.7.1:3128

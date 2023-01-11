@@ -6,25 +6,27 @@
 #BSUB -n 2
 #BSUB -R rusage[mem=64GB]
 #BSUB -R span[hosts=1]
-#BSUB -o ../logs/output_%J.stdout
-#BSUB -eo ../logs/error_%J.stderr
+#BSUB -o output_%J.stdout
+#BSUB -eo error_%J.stderr
 #BSUB -L /bin/bash
 
 # README
 # this script should be executed from site of output dir
 # fastqs should be arranged in dirs labeled by sample
 # make note not to leave trailing / in param paths
+# note the number PARALLEL * CORES will be actual number of threads
 
 set -a
 
 # params
-PIPELINE=			        # name of cellranger pipeline
-PROJ_DIR=			        # /path/to/proj/dir
-REF_DIR=			        # /path/to/gene/ref
-GENE_REF=			        # name of gene ref
-LIB_DIR=$PROJ_DIR			# DIR containing libraries.csv
-MEM=                        # memory cap
-CORES=                      # core cap
+PIPELINE=count			        # name of cellranger pipeline
+PROJ_DIR=                       # /path/to/proj/dir
+REF_DIR=                        # /path/to/gene/ref
+GENE_REF=refdata-cellranger-arc-GRCh38-2020-A-2.0.0	    # name of gene ref
+LIB_DIR=$PROJ_DIR/analysis/cellranger	                # DIR containing libraries.csv
+MEM=                            # memory total for cellranger
+CORES=                          # core cap for cellranger
+PARALLEL=                       # number of parallel tasks
 
 ################################################################################
 
@@ -48,7 +50,7 @@ export -f crProcess
 
 # cellranger function run with gnuparallel
 TARGETS=$(ls $LIB_DIR/*_libraries.csv | xargs -n 1 basename)
-parallel -j 8 crProcess ::: $TARGETS
+parallel -j $PARALLEL crProcess ::: $TARGETS
 
 mv $LIB_DIR/*_libraries.csv .
 
@@ -64,3 +66,4 @@ do
     METRICS=$(tail -n 1 ${i}outs/summary.csv)
     echo "${LABEL},${METRICS}" >> combined_metrics.csv
 done
+

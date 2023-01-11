@@ -11,6 +11,9 @@
 #BSUB -eo $HOME/logs/error_%J.stderr
 #BSUB -L /bin/bash
 
+# README
+# This script should be executed from the site of the output dir
+
 export http_proxy=http://172.28.7.1:3128
 export https_proxy=http://172.28.7.1:3128
 export all_proxy=http://172.28.7.1:3128

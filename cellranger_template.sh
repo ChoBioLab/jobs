@@ -6,8 +6,8 @@
 #BSUB -n 2
 #BSUB -R rusage[mem=64GB]
 #BSUB -R span[hosts=1]
-#BSUB -o ../logs/output_%J.stdout
-#BSUB -eo ../logs/error_%J.stderr
+#BSUB -o output_%J.stdout
+#BSUB -eo error_%J.stderr
 #BSUB -L /bin/bash
 
 # VELOCYTO MINERVA PARAMS
