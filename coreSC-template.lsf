@@ -7,8 +7,8 @@
 #BSUB -R span[ptile=4]
 #BSUB -R rusage[mem=12000]
 #BSUB -u christopher.tastad@mssm.edu
-#BSUB -o $HOME/logs/output_%J.stdout
-#BSUB -eo $HOME/logs/error_%J.stderr
+#BSUB -o /hpc/users/tastac01/ctastad/logs/output_%J.stdout
+#BSUB -eo /hpc/users/tastac01/ctastad/logs/error_%J.stderr
 #BSUB -L /bin/bash
 
 export http_proxy=http://172.28.7.1:3128
@@ -16,6 +16,9 @@ export https_proxy=http://172.28.7.1:3128
 export all_proxy=http://172.28.7.1:3128
 export no_proxy=localhost,*.chimera.hpc.mssm.edu,172.28.0.0/16
 
-cd $HOME
-TOUCH test4.txt
-touch test5.txt
+cd /hpc/users/tastac01/ctastad/projects/coreSC
+
+ml singularity
+
+./run
+
