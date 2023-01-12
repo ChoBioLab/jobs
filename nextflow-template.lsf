@@ -4,7 +4,7 @@
 #BSUB -W 08:00
 #BSUB -q premium
 #BSUB -n 24
-#BSUB -R span[ptile=8]
+#BSUB -R span[ptile=12]
 #BSUB -R rusage[mem=36000]
 #BSUB -u christopher.tastad@mssm.edu
 #BSUB -o output_%J.stdout
