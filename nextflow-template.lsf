@@ -15,7 +15,7 @@
 # This script should be executed at the site of the output dir
 
 PROJ_DIR=			# project directory
-NFC_PIPE=			# nf-core pipeline
+NFC_PIPE=			# nf-core pipeline - e.g. nf-core/rnaseq
 NFC_VER=			# nf-core pipeline version
 NFC_PROFILE=singularity		# nf-core profile (singularity req'd on minerva)
 SAMPLESHEET=			# sample input
@@ -42,7 +42,7 @@ cd $PROJ_DIR
 nextflow run $NFC_PIPE \
 	-r $NFC_VER \
 	-profile $NFC_PROFILE \
-	-w /sc/arion/scratch/$USER \
+	-w /sc/arion/scratch/$USER/work \
 	--input $SAMPLESHEET \
 	--outdir $OUTDIR \
 	--genome $GENOME
