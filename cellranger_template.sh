@@ -13,9 +13,10 @@
 # VELOCYTO MINERVA PARAMS
 # module load anaconda3
 # ml python/3.7.3
-# ml velocyto
 # source activate /hpc/packages/minerva-centos7/velocyto/0.17/velocyto
 # ml samtools
+# ml cellranger/6.1.0
+# ml parallel
 
 # README
 # this script should be executed from site of output dir
