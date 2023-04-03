@@ -6,16 +6,17 @@
 #BSUB -n 2
 #BSUB -R rusage[mem=64GB]
 #BSUB -R span[hosts=1]
-#BSUB -o ../logs/output_%J.stdout
-#BSUB -eo ../logs/error_%J.stderr
+#BSUB -o output_%J.stdout
+#BSUB -eo error_%J.stderr
 #BSUB -L /bin/bash
 
 # VELOCYTO MINERVA PARAMS
 # module load anaconda3
 # ml python/3.7.3
-# ml velocyto
 # source activate /hpc/packages/minerva-centos7/velocyto/0.17/velocyto
 # ml samtools
+# ml cellranger/6.1.0
+# ml parallel
 
 # README
 # this script should be executed from site of output dir
@@ -33,6 +34,7 @@ SAMPLE_DIR=$PROJ_DIR/		# /proj/subdir/to/fastqs
 CELLS=				        # expected cell count
 CHEM=auto			        # chemistry type (e.g. fiveprime)
 MEM=                        # memory cap
+CORES=                      # core cap
 
 ################################################################################
 
@@ -59,7 +61,8 @@ crProcess () {
         --sample=$(ls $SAMPLE_DIR/$1 | head -1 | cut -f1 -d "_") \
         --expect-cells=$CELLS \
         --chemistry=$CHEM \
-        --localmem=$MEM
+        --localmem=$MEM \
+        --localcores=$CORES
     }
 
 # velocyto function
