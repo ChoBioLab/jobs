@@ -7,37 +7,34 @@
 #BSUB -o output_%J.stdout
 #BSUB -e error_%J.sterr
 
+# README
+# this script should be executed from site of output dir
+# fastqs should be arranged in dirs labeled by sample
+# make note not to leave trailing / in param paths
+# all cluster confg files (config.json, lsf.template, retry.json)
+# should be present in the same location given for lsf.template
+
+# ml cellranger parallel
+
 # params
-COUNT=                  # number of samples
 PIPELINE=               # name_of_cr_pipeline
 PROJ_DIR=               # /path/to/proj/dir
-REF_DIR=                # /path/to/gene/refs
-GENE_REF=               # name_of_gene_ref
-ANALYSIS_OUT=$PROJ_DIR/analysis/cr_$PIPELINE_`date '+%F_%H%M'`
-SAMPLE_DIR=$PROJ_DIR/data/fastqs
-CONFIG_DIR=$PROJ_DIR/analysis
+CONFIG=$PROJ_DIR        # /path/to/config.csv
+RUN_ID=                 # unique run ID
 
 ################################################################################
 
-module load cellranger parallel
-mkdir $ANALYSIS_OUT && cd $_
+exec >> cr_${PIPELINE}_`date '+%F_%H%M'`.log
+exec 2>&1
+
+OUT_DIR=cr_arc_${PIPELINE}_`date '+%F_%H%M'`
+mkdir -p $PROJ_DIR/analysis/cellranger/$OUT_DIR && cd $_
+MRO_DISK_SPACE_CHECK=disable
 
 # core cellranger function
-cr_multi () {
-  cellranger multi \
-    --id=cr_multi_$1_`date '+%F_%H%M'` \
-    --csv=$1.csv
-}
+cellranger $PIPELINE \
+  --id=$RUN_ID \
+  --csv=$CONFIG
 
-# export cr function to env for parallel
-export -f cr_multi
-
-# iterate through generation of config csv per sample
-for i in $(seq 1 $COUNT); do
-  cp $CONFIG_DIR/cellranger_multi_config_template.csv $ANALYSIS_OUT/TD005310-CP-$i.csv
-  sed -i -e "s/\*\*\*/$i/g" TD005310-CP-$i.csv
-done
-
-# execute cellranger in parallel
-find TD005310-CP-* | cut -d. -f1 | parallel cr_multi {}
+mv $CONFIG .
 
