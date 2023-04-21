@@ -2,10 +2,10 @@
 #BSUB -J coresc
 #BSUB -P acc_untreatedIBD
 #BSUB -W 01:00
-#BSUB -q express
-#BSUB -n 4
-#BSUB -R span[ptile=4]
+#BSUB -q premium
+#BSUB -n 12
 #BSUB -R rusage[mem=12000]
+#BSUB -R himem
 #BSUB -u christopher.tastad@mssm.edu
 #BSUB -o output_%J.stdout
 #BSUB -eo error_%J.stderr
@@ -15,10 +15,9 @@
 # This script should be executed from the site of the output dir
 
 PROJ_DIR=                   # project directory
+CORESC_DIR=$PROJ_DIR                   # project directory
 ATAC=FALSE                  # run atac-multi-wnn routine
 CITE=FALSE                  # run cite-wnn routine
-SAMPLES=                    # sample config input location
-PARAMS=                     # params config input location
 HARMONIZE=FALSE             # run harmony integration
 
 ################################################################################
@@ -28,9 +27,9 @@ export https_proxy=http://172.28.7.1:3128
 export all_proxy=http://172.28.7.1:3128
 export no_proxy=localhost,*.chimera.hpc.mssm.edu,172.28.0.0/16
 
-cd $PROJ_DIR
+cd $CORESC_DIR
 
 ml singularity
 
-./run -a $ATAC -c $CITE -s $SAMPLES -p $PARAMS -h $HARMONIZE
+./run -a $ATAC -c $CITE -h $HARMONIZE
 
