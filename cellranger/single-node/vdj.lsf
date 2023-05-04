@@ -24,6 +24,7 @@ CONFIG_DIR=$PROJ_DIR/analysis
 
 module load cellranger parallel
 mkdir $ANALYSIS_OUT && cd $_
+MRO_DISK_SPACE_CHECK=disable
 
 # core cellranger function
 cr_multi () {

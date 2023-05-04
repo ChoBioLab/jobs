@@ -29,6 +29,7 @@ CELLS=			# expected cell count
 
 OUT_DIR=cs_`date '+%F_%H%M'`
 mkdir -p $PROJ_DIR/analysis/cite_seq_count/$OUT_DIR && cd $_
+MRO_DISK_SPACE_CHECK=disable
 
 # core cellranger function
 csProcess () {

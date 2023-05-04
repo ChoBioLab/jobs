@@ -35,6 +35,7 @@ exec 2>&1
 
 OUT_DIR=cr_arc_${PIPELINE}_`date '+%F_%H%M'`
 mkdir -p $PROJ_DIR/analysis/cellranger/$OUT_DIR && cd $_
+MRO_DISK_SPACE_CHECK=disable
 
 # core cellranger function
 crProcess () {

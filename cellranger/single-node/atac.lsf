@@ -29,6 +29,7 @@ SAMPLE_DIR=$PROJ_DIR/		# /proj/subdir/to/fastqs
 OUT_DIR=cr_${PIPELINE}_`date '+%F_%H%M'`
 mkdir -p $PROJ_DIR/analysis/cellranger/$OUT_DIR
 cd $PROJ_DIR/analysis/cellranger/$OUT_DIR
+MRO_DISK_SPACE_CHECK=disable
 
 # core cellranger function
 crProcess () {
