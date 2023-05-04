@@ -19,18 +19,17 @@
 # ml python/3.7.3
 # source activate /hpc/packages/minerva-centos7/velocyto/0.17/velocyto
 # ml samtools
-# ml cellranger/6.1.0
+ml cellranger/7.1.0
 
 set -a
 
 # params
-PIPELINE=			        # name of cellranger pipeline
-PROJ_DIR=			        # /path/to/proj/dir
-REF_DIR=                    # /path/to/gene/ref
-GENE_REF=                   # name of gene ref
+PIPELINE=			# name of cellranger pipeline
+PROJ_DIR=			# /path/to/proj/dir
+REF_DIR=                    	# /path/to/gene/ref
+GENE_REF=                   	# name of gene ref
 SAMPLE_DIR=$PROJ_DIR/		# /proj/subdir/to/fastqs
-CELLS=				        # expected cell count
-CHEM=auto			        # chemistry type (e.g. fiveprime)
+CHEM=auto			# chemistry type (e.g. fiveprime)
 CLUST_TEMPLATE=		        # /path/to/lsf.template cluster file
 
 ################################################################################
@@ -56,7 +55,6 @@ crProcess () {
         --$GENOME_LABEL=$REF_DIR/$GENE_REF \
         --fastqs=$SAMPLE_DIR/$1 \
         --sample=$(ls $SAMPLE_DIR/$1 | head -1 | cut -f1 -d "_") \
-        --expect-cells=$CELLS \
         --chemistry=$CHEM \
     	--jobmode=$CLUST_TEMPLATE
     }
@@ -69,7 +67,7 @@ crProcess () {
 #     }
 
 export -f crProcess
-export -f vcProcess
+# export -f vcProcess
 
 # cellranger execution
 for i in $(ls $SAMPLE_DIR)
