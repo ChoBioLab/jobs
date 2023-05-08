@@ -18,11 +18,7 @@
 # to be present at the site of execution
 
 # MINERVA PARAMS
-# module load anaconda3
-# ml python/3.7.3
-# source activate /hpc/packages/minerva-centos7/velocyto/0.17/velocyto
-# ml samtools
-# ml cellranger/6.1.0
+ ml cellranger/7.1.0
 
 set -a
 
@@ -31,7 +27,7 @@ PIPELINE=			        # name of cellranger pipeline
 PROJ_DIR=			        # /path/to/proj/dir
 REF_DIR=                    # /path/to/gene/ref
 GENE_REF=                   # name of gene ref
-SAMPLE_DIR=$PROJ_DIR/		# /proj/subdir/to/fastqs
+LIB_DIR=$PROJ_DIR/		    # /proj/subdir/to/libraries.csv
 CLUST_TEMPLATE=		        # /path/to/lsf.template cluster file
 
 ################################################################################
@@ -54,24 +50,23 @@ MRO_DISK_SPACE_CHECK=disable
 # cellranger function
 crProcess () {
     cellranger $PIPELINE \
-        --id=$1 \
+        --id=$(echo $1 | sed 's/_libraries.csv//') \
         --$GENOME_LABEL=$REF_DIR/$GENE_REF \
-        --libraries=$SAMPLE_DIR/library.csv \
-        --feature-ref=$SAMPLE_DIR/feature_ref.csv \
+        --libraries=$LIB_DIR/$1 \
+        --feature-ref=$LIB_DIR/feature_ref.csv \
     	--jobmode=$CLUST_TEMPLATE
     }
 
 export -f crProcess
-export -f vcProcess
 
 # cellranger execution
-for i in $(ls $SAMPLE_DIR)
+for i in $(ls $LIB_DIR/*_libraries.csv | xargs -n 1 basename)
 do
     crProcess $i
 done
 
-mv $SAMPLE_DIR/feature_ref.csv .
-mv $SAMPLE_DIR/library.csv .
+mv $LIB_DIR/*_libraries.csv .
+mv $LIB_DIR/feature_ref.csv .
 
 # run cellranger summarizer
 cd $(ls -d */ | head -n 1)
