@@ -15,12 +15,15 @@
 # should be present in the same location given for lsf.template
 
 # ml cellranger parallel
+ml cellranger/7.1.0
+
+set -a
 
 # params
-PIPELINE=               # name_of_cr_pipeline
 PROJ_DIR=               # /path/to/proj/dir
 CONFIG=$PROJ_DIR        # /path/to/config.csv
 RUN_ID=                 # unique run ID
+CLUST_TEMPLATE=		      # /path/to/lsf.template cluster file
 
 ################################################################################
 
@@ -32,9 +35,23 @@ mkdir -p $PROJ_DIR/analysis/cellranger/$OUT_DIR && cd $_
 MRO_DISK_SPACE_CHECK=disable
 
 # core cellranger function
-cellranger $PIPELINE \
+cellranger multi \
   --id=$RUN_ID \
-  --csv=$CONFIG
+  --csv=$CONFIG \
+  --jobmode=$CLUST_TEMPLATE
 
 mv $CONFIG .
+
+# run cellranger summarizer
+cd $(ls -d */ | head -n 1)
+head -n 1 outs/metrics_summary.csv > ../combined_metrics.csv
+cd ../
+sed -i 's/^/Sample,/' combined_metrics.csv
+
+for i in $(/bin/ls -d */)
+do
+  LABEL=$(echo $i | sed 's/\///g')
+  METRICS=$(tail -n 1 ${i}outs/metrics_summary.csv)
+  echo "${LABEL},${METRICS}" >> combined_metrics.csv
+done
 

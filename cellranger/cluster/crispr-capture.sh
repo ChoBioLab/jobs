@@ -18,7 +18,7 @@
 # to be present at the site of execution
 
 # MINERVA PARAMS
- ml cellranger/7.1.0
+ml cellranger/7.1.0
 
 set -a
 
@@ -57,7 +57,7 @@ crProcess () {
     	--jobmode=$CLUST_TEMPLATE
     }
 
-export -f crProcess
+    export -f crProcess
 
 # cellranger execution
 for i in $(ls $LIB_DIR/*_libraries.csv | xargs -n 1 basename)
