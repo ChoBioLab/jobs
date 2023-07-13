@@ -15,10 +15,11 @@
 # This script should be executed from the site of the output dir
 
 PROJ_DIR=                   # project directory
-CORESC_DIR=$PROJ_DIR                   # project directory
+CORESC_DIR=$PROJ_DIR                   # coreSC directory
 ATAC=FALSE                  # run atac-multi-wnn routine
 CITE=FALSE                  # run cite-wnn routine
 HARMONIZE=FALSE             # run harmony integration
+VERSION=                    # seurat version to use i.e. v4-r2
 
 ################################################################################
 
@@ -31,5 +32,5 @@ cd $CORESC_DIR
 
 ml singularity
 
-./run -a $ATAC -c $CITE -h $HARMONIZE
+./run -v $VERSION -a $ATAC -c $CITE -h $HARMONIZE
 
