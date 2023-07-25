@@ -30,7 +30,7 @@ PARALLEL=                       # number of parallel tasks
 
 ################################################################################
 
-exec >> cr_${PIPELINE}_`date '+%F_%H%M'`.log
+exec >> cr-arc_${PIPELINE}_`date '+%F_%H%M'`.log
 exec 2>&1
 
 OUT_DIR=cr_arc_${PIPELINE}_`date '+%F_%H%M'`
