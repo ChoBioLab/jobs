@@ -3,7 +3,6 @@
 #BSUB -W 48:00
 #BSUB -q premium
 #BSUB -J <JOB NAME>
-#BSUB -n 4
 #BSUB -o output_%J.stdout
 #BSUB -e error_%J.sterr
 
