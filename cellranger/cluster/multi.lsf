@@ -7,10 +7,10 @@
 #BSUB -e error_%J.sterr
 
 # README
-# this script should be executed from site of output dir
+# this script should be executed from site of cellranger dir
 # fastqs should be arranged in dirs labeled by sample
 # make note not to leave trailing / in param paths
-# all cluster confg files (config.json, lsf.template, retry.json)
+# all cluster config files (config.json, lsf.template, retry.json)
 # should be present in the same location given for lsf.template
 
 # ml cellranger parallel
@@ -43,14 +43,17 @@ mv $CONFIG .
 
 # run cellranger summarizer
 cd $(ls -d */ | head -n 1)
-head -n 1 outs/metrics_summary.csv > ../combined_metrics.csv
+head -n 1 outs/per_sample_outs/$(ls -d */ | head -n 1)/metrics_summary.csv > ../combined_metrics.csv
 cd ../
 sed -i 's/^/Sample,/' combined_metrics.csv
 
-for i in $(/bin/ls -d */)
-do
-  LABEL=$(echo $i | sed 's/\///g')
-  METRICS=$(tail -n 1 ${i}outs/metrics_summary.csv)
-  echo "${LABEL},${METRICS}" >> combined_metrics.csv
+for i in $(/bin/ls -d */); do
+  PARENT_DIR=$(echo "$i" | sed 's/\///g')  # Extract the parent subdirectory name
+  for j in "$i"outs/per_sample_outs/*/; do
+    SUBSUB_DIR=$(echo "$j" | sed -e 's/\/outs\///g' -e 's/\///g')  # Extract the sub-subdirectory name
+    METRICS=$(tail -n 1 "${j}outs/metrics_summary.csv")
+    LABEL="${PARENT_DIR}_${SUBSUB_DIR}"
+    echo "${LABEL},${METRICS}" >> combined_metrics.csv
+  done
 done
 
