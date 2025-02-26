@@ -24,155 +24,101 @@ def is_in_skip_path(file_path):
     return False
 
 
+def create_result_dict(sample_name, file_path, result_type, run_id):
+    """Create a standardized result dictionary."""
+    return {
+        "sample_name": sample_name,
+        "file_path": os.path.abspath(file_path),
+        "type": result_type,
+        "run_id": run_id,
+    }
+
+
+def find_h5_in_count_directory(count_dir, sample_dir, run_id):
+    """Search for h5 files in a count directory with different naming patterns."""
+    h5_patterns = [
+        "sample_raw_feature_bc_matrix.h5",
+        "raw_feature_bc_matrix.h5",
+    ]
+
+    # Check for standard naming patterns first
+    for pattern in h5_patterns:
+        h5_path = os.path.join(count_dir, pattern)
+        if os.path.exists(h5_path):
+            return create_result_dict(sample_dir, h5_path, "multi", run_id)
+
+    # Fall back to searching for any h5 file containing "raw"
+    h5_files = [
+        f
+        for f in os.listdir(count_dir)
+        if f.endswith(".h5") and "raw" in f.lower()
+    ]
+    if h5_files:
+        h5_path = os.path.join(count_dir, h5_files[0])
+        return create_result_dict(sample_dir, h5_path, "multi", run_id)
+
+    return None
+
+
 def find_raw_h5_files_in_run(run_dir):
     """Find all raw feature matrix h5 files in a specific CellRanger run directory."""
     results = []
+    run_id = os.path.basename(run_dir)
 
-    # Check if this is a traditional CellRanger count output
+    # Check for traditional CellRanger count output
     raw_h5_path = os.path.join(run_dir, "outs", "raw_feature_bc_matrix.h5")
     if os.path.exists(raw_h5_path):
-        sample_name = os.path.basename(run_dir)
-        results.append(
-            {
-                "sample_name": sample_name,
-                "file_path": os.path.abspath(raw_h5_path),
-                "type": "count",
-                "run_id": sample_name,
-            }
-        )
+        results.append(create_result_dict(run_id, raw_h5_path, "count", run_id))
         return results
 
-    # Check if this is a CellRanger multi output - focus on per_sample_outs
+    # Check for CellRanger multi output
     per_sample_path = os.path.join(run_dir, "outs", "per_sample_outs")
-    if os.path.exists(per_sample_path):
-        print(f"Found per_sample_outs directory: {per_sample_path}")
+    if not os.path.exists(per_sample_path):
+        return results
 
-        # List sample directories
-        sample_dirs = [
-            d
-            for d in os.listdir(per_sample_path)
-            if os.path.isdir(os.path.join(per_sample_path, d))
-            and not should_skip_directory(d)
-        ]
+    # Process each sample directory
+    sample_dirs = [
+        d
+        for d in os.listdir(per_sample_path)
+        if os.path.isdir(os.path.join(per_sample_path, d))
+        and not should_skip_directory(d)
+    ]
 
-        print(f"Sample directories found: {', '.join(sample_dirs)}")
+    for sample_dir in sample_dirs:
+        count_dir = os.path.join(per_sample_path, sample_dir, "count")
+        if not os.path.exists(count_dir):
+            continue
 
-        # Check each sample directory for count directory and h5 files
-        for sample_dir in sample_dirs:
-            count_dir = os.path.join(per_sample_path, sample_dir, "count")
-            if os.path.exists(count_dir):
-                print(f"  - {sample_dir} has count directory")
+        result = find_h5_in_count_directory(count_dir, sample_dir, run_id)
+        if result:
+            results.append(result)
 
-                # Check for sample_raw_feature_bc_matrix.h5 (CellRanger multi format)
-                raw_h5 = os.path.join(
-                    count_dir, "sample_raw_feature_bc_matrix.h5"
-                )
-                if os.path.exists(raw_h5):
-                    print(f"    - Found sample_raw_feature_bc_matrix.h5")
-                    results.append(
-                        {
-                            "sample_name": sample_dir,
-                            "file_path": os.path.abspath(raw_h5),
-                            "type": "multi",
-                            "run_id": os.path.basename(run_dir),
-                        }
-                    )
-                else:
-                    # Also check for standard raw_feature_bc_matrix.h5 as fallback
-                    raw_h5 = os.path.join(count_dir, "raw_feature_bc_matrix.h5")
-                    if os.path.exists(raw_h5):
-                        print(f"    - Found raw_feature_bc_matrix.h5")
-                        results.append(
-                            {
-                                "sample_name": sample_dir,
-                                "file_path": os.path.abspath(raw_h5),
-                                "type": "multi",
-                                "run_id": os.path.basename(run_dir),
-                            }
-                        )
-                    else:
-                        print(f"    - No raw feature matrix h5 file found")
-
-                        # List files in count directory to see what's available
-                        count_files = os.listdir(count_dir)
-                        h5_files = [f for f in count_files if f.endswith(".h5")]
-                        if h5_files:
-                            print(
-                                f"    - Available h5 files: {', '.join(h5_files)}"
-                            )
-
-                            # Look for any file that might be a raw feature matrix
-                            raw_candidates = [
-                                f for f in h5_files if "raw" in f.lower()
-                            ]
-                            if raw_candidates:
-                                print(
-                                    f"    - Potential raw matrix candidates: {', '.join(raw_candidates)}"
-                                )
-                                # Use the first candidate
-                                raw_h5 = os.path.join(
-                                    count_dir, raw_candidates[0]
-                                )
-                                print(
-                                    f"    - Using {raw_candidates[0]} as raw feature matrix"
-                                )
-                                results.append(
-                                    {
-                                        "sample_name": sample_dir,
-                                        "file_path": os.path.abspath(raw_h5),
-                                        "type": "multi",
-                                        "run_id": os.path.basename(run_dir),
-                                    }
-                                )
-                        else:
-                            print(f"    - No h5 files found in count directory")
-            else:
-                print(f"  - {sample_dir} does NOT have count directory")
-
-    # If no results found through direct paths, try a more focused search
+    # If no results found, try a focused search
     if not results:
-        print(
-            f"No results found through direct paths, trying focused search..."
-        )
-
-        # Focus specifically on per_sample_outs
-        for root, dirs, files in os.walk(
-            os.path.join(run_dir, "outs", "per_sample_outs")
-        ):
-            # Skip directories that should be skipped
-            dirs[:] = [d for d in dirs if not should_skip_directory(d)]
-
-            # Skip if we're in a path that should be skipped
+        for root, dirs, files in os.walk(per_sample_path):
             if is_in_skip_path(root):
                 continue
 
+            dirs[:] = [d for d in dirs if not should_skip_directory(d)]
+
             for file in files:
-                # Look for both naming conventions
-                if (
-                    file == "sample_raw_feature_bc_matrix.h5"
-                    or file == "raw_feature_bc_matrix.h5"
-                ):
+                if file in [
+                    "sample_raw_feature_bc_matrix.h5",
+                    "raw_feature_bc_matrix.h5",
+                ]:
                     file_path = os.path.join(root, file)
-                    print(f"Found raw h5 file: {file_path}")
-
-                    # Extract sample name from path
                     parts = file_path.split(os.sep)
-                    sample_idx = (
-                        parts.index("per_sample_outs") + 1
-                        if "per_sample_outs" in parts
-                        else -1
-                    )
-
-                    if sample_idx != -1 and sample_idx < len(parts):
-                        sample_name = parts[sample_idx]
-                        results.append(
-                            {
-                                "sample_name": sample_name,
-                                "file_path": os.path.abspath(file_path),
-                                "type": "multi",
-                                "run_id": os.path.basename(run_dir),
-                            }
-                        )
+                    try:
+                        sample_idx = parts.index("per_sample_outs") + 1
+                        if sample_idx < len(parts):
+                            sample_name = parts[sample_idx]
+                            results.append(
+                                create_result_dict(
+                                    sample_name, file_path, "multi", run_id
+                                )
+                            )
+                    except ValueError:
+                        continue
 
     return results
 
@@ -180,17 +126,16 @@ def find_raw_h5_files_in_run(run_dir):
 def find_raw_h5_files(input_dir):
     """Find all raw feature matrix h5 files in the input directory."""
     results = []
-
-    # Convert input_dir to absolute path
     input_dir = os.path.abspath(input_dir)
 
     # If input_dir is a specific CellRanger run directory
     if os.path.exists(os.path.join(input_dir, "outs")):
         return find_raw_h5_files_in_run(input_dir)
 
-    # Otherwise, search for CellRanger outputs in subdirectories
-    # Look for directories that might be CellRanger run directories
+    # Search for CellRanger outputs in subdirectories
     potential_run_dirs = []
+
+    # Look for run directories at top level
     for item in os.listdir(input_dir):
         item_path = os.path.join(input_dir, item)
         if os.path.isdir(item_path) and os.path.exists(
@@ -198,7 +143,7 @@ def find_raw_h5_files(input_dir):
         ):
             potential_run_dirs.append(item_path)
 
-    # If no potential run directories found at the top level, look one level deeper
+    # Look one level deeper if nothing found
     if not potential_run_dirs:
         for item in os.listdir(input_dir):
             item_path = os.path.join(input_dir, item)
@@ -212,8 +157,7 @@ def find_raw_h5_files(input_dir):
 
     # Process each potential run directory
     for run_dir in potential_run_dirs:
-        run_results = find_raw_h5_files_in_run(run_dir)
-        results.extend(run_results)
+        results.extend(find_raw_h5_files_in_run(run_dir))
 
     return results
 
@@ -228,29 +172,24 @@ def extract_run_id_from_logs(file_path):
         for log_file in log_files:
             with open(log_file, "r") as f:
                 content = f.read()
-                # Look for run ID in log content
                 match = re.search(r"Run ID: ([a-zA-Z0-9_-]+)", content)
                 if match:
                     return match.group(1)
-
-    # If no run ID found, use timestamp
     return f"cellranger_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
 
 def generate_lsf_script(sample_info, output_dir, params):
     """Generate an LSF script for CellBender processing."""
     sample_name = sample_info["sample_name"]
-    input_file = sample_info["file_path"]  # Already absolute path
+    input_file = sample_info["file_path"]
     run_id = sample_info.get("run_id", extract_run_id_from_logs(input_file))
 
-    # Create output directory structure with absolute paths
-    if sample_info["type"] == "multi":
-        output_subdir = os.path.abspath(
-            os.path.join(output_dir, run_id, sample_name)
-        )
-    else:
-        output_subdir = os.path.abspath(os.path.join(output_dir, sample_name))
-
+    # Create output directory structure
+    output_subdir = os.path.abspath(
+        os.path.join(output_dir, run_id, sample_name)
+        if sample_info["type"] == "multi"
+        else os.path.join(output_dir, sample_name)
+    )
     os.makedirs(output_subdir, exist_ok=True)
 
     output_file = os.path.join(
@@ -260,9 +199,7 @@ def generate_lsf_script(sample_info, output_dir, params):
         output_subdir, f"run_cellbender_{sample_name}.lsf"
     )
 
-    with open(lsf_script_path, "w") as f:
-        f.write(
-            f"""#BSUB -P {params['project']}
+    script_content = f"""#BSUB -P {params['project']}
 #BSUB -W {params['walltime']}
 #BSUB -q {params['queue']}
 #BSUB -n {params['cores']}
@@ -311,7 +248,9 @@ cellbender remove-background \\
 
 echo "Completed CellBender for sample {sample_name} at $(date)"
 """
-        )
+
+    with open(lsf_script_path, "w") as f:
+        f.write(script_content)
 
     return lsf_script_path
 
@@ -383,34 +322,17 @@ def main():
 
     args = parser.parse_args()
 
-    # Convert input and output directories to absolute paths
+    # Process directories and find files
     input_dir = os.path.abspath(args.input_dir)
     output_dir = os.path.abspath(args.output_dir)
-
-    # Find all raw feature matrix h5 files
-    print(f"Searching for raw feature matrix h5 files in {input_dir}...")
-    print(
-        f"Note: Looking for sample_raw_feature_bc_matrix.h5 or raw_feature_bc_matrix.h5 in per_sample_outs"
-    )
     sample_files = find_raw_h5_files(input_dir)
 
     if not sample_files:
         print(f"No raw feature matrix h5 files found in {input_dir}")
         return
 
-    # Get unique run IDs
+    # Get unique run IDs and create parameters dictionary
     run_ids = set(sample["run_id"] for sample in sample_files)
-    print(
-        f"Found samples from {len(run_ids)} CellRanger runs: {', '.join(run_ids)}"
-    )
-
-    print(f"Found {len(sample_files)} samples to process:")
-    for sample in sample_files:
-        print(
-            f"  - {sample['sample_name']} ({sample['type']}) from {sample['run_id']}"
-        )
-
-    # Create parameters dictionary
     params = {
         "project": args.project,
         "walltime": args.walltime,
@@ -425,21 +347,19 @@ def main():
     }
 
     # Generate LSF scripts
-    lsf_scripts = []
-    for sample_info in sample_files:
-        lsf_script = generate_lsf_script(sample_info, output_dir, params)
-        lsf_scripts.append(lsf_script)
+    lsf_scripts = [
+        generate_lsf_script(sample_info, output_dir, params)
+        for sample_info in sample_files
+    ]
 
-    # Create submission scripts for each run ID
+    # Create run-specific submission scripts
     for run_id in run_ids:
-        # Filter scripts for this run ID
         run_scripts = [
             script
             for script, sample in zip(lsf_scripts, sample_files)
             if sample["run_id"] == run_id
         ]
 
-        # Create a submission script specific to this run
         submit_script_path = os.path.join(
             output_dir, f"submit_cellbender_jobs_{run_id}.sh"
         )
@@ -452,11 +372,8 @@ def main():
                 f.write(f"bsub < {script}\n")
 
         os.chmod(submit_script_path, 0o755)
-        print(
-            f"\nGenerated submission script for run {run_id}: {submit_script_path}"
-        )
 
-    # Also create a master submission script for all jobs
+    # Create master submission script
     all_submit_script_path = os.path.join(
         output_dir, "submit_all_cellbender_jobs.sh"
     )
@@ -468,10 +385,14 @@ def main():
 
     os.chmod(all_submit_script_path, 0o755)
 
-    print(f"\nGenerated {len(lsf_scripts)} LSF scripts")
-    print(f"To submit all jobs, run: {all_submit_script_path}")
+    print("\nGenerated {count} LSF scripts".format(count=len(lsf_scripts)))
     print(
-        f"Or submit jobs for specific runs using the run-specific submission scripts"
+        "To submit all jobs, run: {script}".format(
+            script=all_submit_script_path
+        )
+    )
+    print(
+        "Or submit jobs for specific runs using the run-specific submission scripts"
     )
 
 
