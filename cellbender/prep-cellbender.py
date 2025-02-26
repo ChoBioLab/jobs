@@ -308,10 +308,6 @@ cellbender remove-background \\
     --cuda \\
     --input {input_file} \\
     --output {output_file} \\
-    --expected-cells {params.get('expected_cells', 3000)} \\
-    --total-droplets-included {params.get('total_droplets', 25000)} \\
-    --fpr {params.get('fpr', 0.01)} \\
-    --epochs {params.get('epochs', 150)}
 
 echo "Completed CellBender for sample {sample_name} at $(date)"
 """
@@ -385,27 +381,6 @@ def main():
         help="Conda environment name (default: cellbender)",
     )
 
-    # CellBender parameters
-    cellbender_group = parser.add_argument_group("CellBender parameters")
-    cellbender_group.add_argument(
-        "--expected-cells",
-        default="3000",
-        help="Expected number of cells (default: 3000)",
-    )
-    cellbender_group.add_argument(
-        "--total-droplets",
-        default="25000",
-        help="Total droplets to include (default: 25000)",
-    )
-    cellbender_group.add_argument(
-        "--fpr", default="0.01", help="False positive rate (default: 0.01)"
-    )
-    cellbender_group.add_argument(
-        "--epochs",
-        default="150",
-        help="Number of training epochs (default: 150)",
-    )
-
     args = parser.parse_args()
 
     # Convert input and output directories to absolute paths
@@ -447,10 +422,6 @@ def main():
         "gpu_model": args.gpu_model,
         "gpu_num": args.gpu_num,
         "cuda_version": args.cuda_version,
-        "expected_cells": args.expected_cells,
-        "total_droplets": args.total_droplets,
-        "fpr": args.fpr,
-        "epochs": args.epochs,
     }
 
     # Generate LSF scripts
