@@ -2,6 +2,7 @@
 
 import argparse
 import glob
+import logging
 import os
 import re
 from datetime import datetime
@@ -175,31 +176,29 @@ def extract_run_id_from_logs(file_path):
                 match = re.search(r"Run ID: ([a-zA-Z0-9_-]+)", content)
                 if match:
                     return match.group(1)
-    return f"cellranger_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    return f"cellranger_run_{datetime.now().strftime('%Y-%m-%d')}"
 
 
-def generate_lsf_script(sample_info, output_dir, params):
-    """Generate an LSF script for CellBender processing."""
+def generate_lsf_script_multi(sample_info, parent_dir, params, multi_lib_id):
+    """Generate an LSF script for CellBender processing for multi samples."""
     sample_name = sample_info["sample_name"]
     input_file = sample_info["file_path"]
     run_id = sample_info.get("run_id", extract_run_id_from_logs(input_file))
 
-    # Create output directory structure
-    output_subdir = os.path.abspath(
-        os.path.join(output_dir, run_id, sample_name)
-        if sample_info["type"] == "multi"
-        else os.path.join(output_dir, sample_name)
-    )
-    os.makedirs(output_subdir, exist_ok=True)
+    # Create sample-specific subdirectory
+    sample_dir = os.path.join(parent_dir, sample_name)
+    os.makedirs(sample_dir, exist_ok=True)
 
-    output_file = os.path.join(
-        output_subdir, f"{sample_name}_cellbender_output.h5"
-    )
-    lsf_script_path = os.path.join(
-        output_subdir, f"run_cellbender_{sample_name}.lsf"
-    )
+    # Log the input/output mapping
+    logging.info(f"Processing sample: {sample_name}")
+    logging.info(f"Input file: {input_file}")
+    logging.info(f"Output directory: {sample_dir}")
+
+    output_file = os.path.join(sample_dir, f"{sample_name}_cellbender_output.h5")
+    lsf_script_path = os.path.join(sample_dir, f"run_cellbender_{sample_name}.lsf")
 
     script_content = f"""#BSUB -P {params['project']}
+#BSUB -J {sample_name}_cellbender
 #BSUB -W {params['walltime']}
 #BSUB -q {params['queue']}
 #BSUB -n {params['cores']}
@@ -208,9 +207,10 @@ def generate_lsf_script(sample_info, output_dir, params):
 #BSUB -gpu num={params['gpu_num']}
 #BSUB -R rusage[mem={params['memory']}]
 #BSUB -u {params['email']}
-#BSUB -o {output_subdir}/output_{sample_name}_%J.stdout
-#BSUB -eo {output_subdir}/error_{sample_name}_%J.stderr
+#BSUB -o {sample_dir}/output_{sample_name}_%J.stdout
+#BSUB -eo {sample_dir}/error_{sample_name}_%J.stderr
 #BSUB -L /bin/bash
+#BSUB -cwd {sample_dir}
 
 # Generated LSF submission script for CellBender
 # Sample: {sample_name}
@@ -229,12 +229,86 @@ conda activate {params['conda_env']}
 # Load CUDA module if needed
 ml cuda/{params['cuda_version']}
 
-# Create output directory
-mkdir -p {output_subdir}
+# Ensure we're in the sample directory
+cd {sample_dir}
+echo "Working directory: $(pwd)"
 
 # Redirect stdout and stderr using exec
-exec 1> "{output_subdir}/output_{sample_name}.stdout"
-exec 2> "{output_subdir}/error_{sample_name}.stderr"
+exec 1> "{sample_dir}/output_{sample_name}.stdout"
+exec 2> "{sample_dir}/error_{sample_name}.stderr"
+
+echo "Starting CellBender for sample {sample_name} at $(date)"
+echo "Input file: {input_file}"
+echo "Output file: {output_file}"
+echo "GPU devices available: $CUDA_VISIBLE_DEVICES"
+
+cellbender remove-background \\
+    --cuda \\
+    --input {input_file} \\
+    --output {output_file} \\
+
+echo "Completed CellBender for sample {sample_name} at $(date)"
+"""
+
+    with open(lsf_script_path, "w") as f:
+        f.write(script_content)
+
+    return lsf_script_path
+
+
+def generate_lsf_script_single(sample_info, output_dir, params):
+    """Generate an LSF script for CellBender processing for single samples."""
+    sample_name = sample_info["sample_name"]
+    input_file = sample_info["file_path"]
+    run_id = sample_info.get("run_id", extract_run_id_from_logs(input_file))
+
+    # Log the input/output mapping
+    logging.info(f"Processing sample: {sample_name}")
+    logging.info(f"Input file: {input_file}")
+    logging.info(f"Output directory: {output_dir}")
+
+    output_file = os.path.join(output_dir, f"{sample_name}_cellbender_output.h5")
+    lsf_script_path = os.path.join(output_dir, f"run_cellbender_{sample_name}.lsf")
+
+    script_content = f"""#BSUB -P {params['project']}
+#BSUB -J {sample_name}_cellbender
+#BSUB -W {params['walltime']}
+#BSUB -q {params['queue']}
+#BSUB -n {params['cores']}
+#BSUB -R span[hosts=1]
+#BSUB -R {params['gpu_model']}
+#BSUB -gpu num={params['gpu_num']}
+#BSUB -R rusage[mem={params['memory']}]
+#BSUB -u {params['email']}
+#BSUB -o {output_dir}/output_{sample_name}_%J.stdout
+#BSUB -eo {output_dir}/error_{sample_name}_%J.stderr
+#BSUB -L /bin/bash
+#BSUB -cwd {output_dir}
+
+# Generated LSF submission script for CellBender
+# Sample: {sample_name}
+# Input file: {input_file}
+# Output file: {output_file}
+
+export http_proxy=http://172.28.7.1:3128
+export https_proxy=http://172.28.7.1:3128
+export all_proxy=http://172.28.7.1:3128
+export no_proxy=localhost,*.chimera.hpc.mssm.edu,172.28.0.0/16
+
+source /hpc/users/tastac01/micromamba/etc/profile.d/conda.sh
+conda init bash
+conda activate {params['conda_env']}
+
+# Load CUDA module if needed
+ml cuda/{params['cuda_version']}
+
+# Ensure we're in the output directory
+cd {output_dir}
+echo "Working directory: $(pwd)"
+
+# Redirect stdout and stderr using exec
+exec 1> "{output_dir}/output_{sample_name}.stdout"
+exec 2> "{output_dir}/error_{sample_name}.stderr"
 
 echo "Starting CellBender for sample {sample_name} at $(date)"
 echo "Input file: {input_file}"
@@ -274,6 +348,13 @@ def main():
         "--email", required=True, help="Email for job notifications"
     )
 
+    # Optional multi-lib-id parameter
+    parser.add_argument(
+        "--multi-lib-id",
+        help="Library ID for grouping multi outputs (required for CellRanger multi outputs)",
+        default=None,
+    )
+
     # LSF job parameters
     lsf_group = parser.add_argument_group("LSF job parameters")
     lsf_group.add_argument(
@@ -291,15 +372,15 @@ def main():
         "--cores", default="2", help="Number of cores (default: 2)"
     )
     lsf_group.add_argument(
-        "--memory", default="4G", help="Memory per job (default: 4G)"
+        "--memory", default="16G", help="Memory per job (default: 16G)"
     )
 
     # GPU parameters
     gpu_group = parser.add_argument_group("GPU parameters")
     gpu_group.add_argument(
         "--gpu-model",
-        default="h100nvl",
-        help="GPU model: v100, a100, a10080g, h10080g, h100nvl, l40s (default: h100nvl)",
+        default="a100",
+        help="GPU model: v100, a100, a10080g, h10080g, h100nvl, l40s (default: a100)",
     )
     gpu_group.add_argument(
         "--gpu-num",
@@ -324,15 +405,21 @@ def main():
 
     # Process directories and find files
     input_dir = os.path.abspath(args.input_dir)
-    output_dir = os.path.abspath(args.output_dir)
     sample_files = find_raw_h5_files(input_dir)
 
     if not sample_files:
         print(f"No raw feature matrix h5 files found in {input_dir}")
         return
 
-    # Get unique run IDs and create parameters dictionary
-    run_ids = set(sample["run_id"] for sample in sample_files)
+    # Determine if this is a multi run
+    is_multi_run = any(sample["type"] == "multi" for sample in sample_files)
+
+    # Validate multi-lib-id requirement for multi runs
+    if is_multi_run and not args.multi_lib_id:
+        print("Error: --multi-lib-id is required for CellRanger multi outputs")
+        return
+
+    # Set up parameters dictionary
     params = {
         "project": args.project,
         "walltime": args.walltime,
@@ -346,55 +433,91 @@ def main():
         "cuda_version": args.cuda_version,
     }
 
-    # Generate LSF scripts
-    lsf_scripts = [
-        generate_lsf_script(sample_info, output_dir, params)
-        for sample_info in sample_files
-    ]
+    # Base output directory
+    base_output_dir = os.path.abspath(args.output_dir)
+    date_stamp = datetime.now().strftime("%Y-%m-%d")
 
-    # Create run-specific submission scripts
-    for run_id in run_ids:
-        run_scripts = [
-            script
-            for script, sample in zip(lsf_scripts, sample_files)
-            if sample["run_id"] == run_id
-        ]
+    # Handle multi and non-multi runs differently
+    if is_multi_run and args.multi_lib_id:
+        # For multi runs, create a single parent directory
+        parent_dir = os.path.join(base_output_dir, f"{args.multi_lib_id}_{date_stamp}")
+        os.makedirs(parent_dir, exist_ok=True)
 
-        submit_script_path = os.path.join(
-            output_dir, f"submit_cellbender_jobs_{run_id}.sh"
+        # Setup logging for multi run
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+            handlers=[
+                logging.FileHandler(os.path.join(parent_dir, "prep-cellbender.log")),
+                logging.StreamHandler(),
+            ],
         )
+
+        # Generate LSF scripts for all samples in the multi run
+        lsf_scripts = []
+        for sample_info in sample_files:
+            # Create sample-specific subdirectory
+            sample_name = sample_info["sample_name"]
+            sample_dir = os.path.join(parent_dir, sample_name)
+            os.makedirs(sample_dir, exist_ok=True)
+
+            # Generate LSF script
+            lsf_script = generate_lsf_script_multi(sample_info, parent_dir, params, args.multi_lib_id)
+            lsf_scripts.append(lsf_script)
+
+        # Create a single submission script for all samples
+        submit_script_path = os.path.join(parent_dir, "submit_cellbender_jobs.sh")
         with open(submit_script_path, "w") as f:
             f.write("#!/bin/bash\n\n")
-            f.write(
-                f"# Submit CellBender jobs for CellRanger run: {run_id}\n\n"
-            )
-            for script in run_scripts:
+            f.write(f"# Submit CellBender jobs for CellRanger multi run: {args.multi_lib_id}\n\n")
+            for script in lsf_scripts:
                 f.write(f"bsub < {script}\n")
+                f.write("sleep 2\n")
 
         os.chmod(submit_script_path, 0o755)
 
-    # Create master submission script
-    all_submit_script_path = os.path.join(
-        output_dir, "submit_all_cellbender_jobs.sh"
-    )
-    with open(all_submit_script_path, "w") as f:
-        f.write("#!/bin/bash\n\n")
-        f.write("# Submit all CellBender jobs for all runs\n\n")
-        for script in lsf_scripts:
-            f.write(f"bsub < {script}\n")
+        logging.info(f"\nGenerated {len(lsf_scripts)} LSF scripts for multi run")
+        logging.info(f"Submission script created at: {submit_script_path}")
 
-    os.chmod(all_submit_script_path, 0o755)
+    else:
+        # For non-multi runs, create a separate directory for each sample
+        for sample_info in sample_files:
+            sample_name = sample_info["sample_name"]
+            sample_output_dir = os.path.join(base_output_dir, f"{sample_name}_{date_stamp}")
+            os.makedirs(sample_output_dir, exist_ok=True)
 
-    print("\nGenerated {count} LSF scripts".format(count=len(lsf_scripts)))
-    print(
-        "To submit all jobs, run: {script}".format(
-            script=all_submit_script_path
-        )
-    )
-    print(
-        "Or submit jobs for specific runs using the run-specific submission scripts"
-    )
+            # Setup logging for this sample
+            sample_log_handler = logging.FileHandler(os.path.join(sample_output_dir, "prep-cellbender.log"))
+            logging.basicConfig(
+                level=logging.INFO,
+                format="%(asctime)s - %(levelname)s - %(message)s",
+                handlers=[sample_log_handler, logging.StreamHandler()],
+                force=True  # Reset handlers for each sample
+            )
+
+            # Generate LSF script for this sample
+            lsf_script = generate_lsf_script_single(sample_info, sample_output_dir, params)
+
+            # Create a submission script for this sample
+            submit_script_path = os.path.join(sample_output_dir, "submit_cellbender_jobs.sh")
+            with open(submit_script_path, "w") as f:
+                f.write("#!/bin/bash\n\n")
+                f.write(f"# Submit CellBender job for sample: {sample_name}\n\n")
+                f.write(f"bsub < {lsf_script}\n")
+
+            os.chmod(submit_script_path, 0o755)
+
+            logging.info(f"Generated LSF script for sample {sample_name}")
+            logging.info(f"Submission script created at: {submit_script_path}")
+
+            # Close the log handler for this sample
+            sample_log_handler.close()
+            logging.getLogger().removeHandler(sample_log_handler)
+
+        print(f"\nGenerated LSF scripts for individual samples")
+        print("Each sample has its own directory with submission script")
 
 
 if __name__ == "__main__":
     main()
+
