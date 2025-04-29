@@ -2,10 +2,10 @@
 #BSUB -J job_of_chris
 #BSUB -P acc_untreatedIBD
 #BSUB -W 01:00
-#BSUB -q express
-#BSUB -n 4
-#BSUB -R span[ptile=4]
-#BSUB -R rusage[mem=12000]
+#BSUB -q premium
+#BSUB -n 2
+#BSUB -R span[hosts=1]
+#BSUB -R rusage[mem=2G]
 #BSUB -u christopher.tastad@mssm.edu
 #BSUB -o $HOME/logs/output_%J.stdout
 #BSUB -eo $HOME/logs/error_%J.stderr

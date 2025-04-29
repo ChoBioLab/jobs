@@ -4,8 +4,8 @@
 #BSUB -W 01:00
 #BSUB -q premium
 #BSUB -n 12
+#BSUB -R span[hosts=1]
 #BSUB -R rusage[mem=12000]
-#BSUB -R himem
 #BSUB -u christopher.tastad@mssm.edu
 #BSUB -o output_%J.stdout
 #BSUB -eo error_%J.stderr
