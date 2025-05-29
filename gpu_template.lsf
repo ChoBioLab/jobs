@@ -2,19 +2,21 @@
 #BSUB -J job_of_chris
 #BSUB -P acc_untreatedIBD
 #BSUB -W 01:00
-#BSUB -q premium
+#BSUB -q gpu
 #BSUB -n 2
 #BSUB -R span[hosts=1]
 #BSUB -R rusage[mem=2G]
+#BSUB -R h100nvl
+#BSUB -gpu num=1
 #BSUB -u christopher.tastad@mssm.edu
-#BSUB -o $HOME/logs/output_%J.stdout
-#BSUB -eo $HOME/logs/error_%J.stderr
+#BSUB -o output_%J.stdout
+#BSUB -eo error_%J.stderr
 #BSUB -L /bin/bash
 
 # README
 # This script should be executed from the site of the output dir
 
-PROJ_DIR=                       # project dir
+PROJ_DIR= # project dir
 
 ################################################################################
 
@@ -24,4 +26,3 @@ export all_proxy=http://172.28.7.1:3128
 export no_proxy=localhost,*.chimera.hpc.mssm.edu,172.28.0.0/16
 
 cd $PROJ_DIR
-
