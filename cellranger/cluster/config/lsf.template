@@ -19,7 +19,7 @@
 #
 #BSUB -J __MRO_JOB_NAME__
 #BSUB -P acc_untreatedIBD
-#BSUB -W 24:00
+#BSUB -W 2:00
 #BSUB -q premium
 #BSUB -n __MRO_THREADS__
 #BSUB -o __MRO_STDOUT__
