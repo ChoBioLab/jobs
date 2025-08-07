@@ -42,18 +42,112 @@ cellranger multi \
 mv $CONFIG .
 
 # run cellranger summarizer
-cd $(ls -d */ | head -n 1)
-head -n 1 outs/per_sample_outs/$(ls -d */ | head -n 1)/metrics_summary.csv > ../combined_metrics.csv
-cd ../
-sed -i 's/^/Sample,/' combined_metrics.csv
 
-for i in $(/bin/ls -d */); do
-  PARENT_DIR=$(echo "$i" | sed 's/\///g')  # Extract the parent subdirectory name
-  for j in "$i"outs/per_sample_outs/*/; do
-    SUBSUB_DIR=$(echo "$j" | sed -e 's/\/outs\///g' -e 's/\///g')  # Extract the sub-subdirectory name
-    METRICS=$(tail -n 1 "${j}outs/metrics_summary.csv")
-    LABEL="${PARENT_DIR}_${SUBSUB_DIR}"
-    echo "${LABEL},${METRICS}" >> combined_metrics.csv
-  done
+# Create temporary directory for processing
+temp_dir=$(mktemp -d)
+trap "rm -rf $temp_dir" EXIT
+
+echo "Processing metrics..."
+
+# First pass: collect sample-specific (Cells category) metrics
+for sample_dir in */; do
+    sample_name="${sample_dir%/}"
+
+    for subsample_dir in "${sample_dir}outs/per_sample_outs"/*/; do
+        if [ -d "$subsample_dir" ]; then
+            subsample_name=$(basename "$subsample_dir")
+            metrics_file="${subsample_dir}metrics_summary.csv"
+
+            if [ -f "$metrics_file" ]; then
+                label="${sample_name}_${subsample_name}"
+
+                # Extract only Cells category metrics (sample-specific)
+                awk -F',' -v sample="$label" '
+                NR > 1 && $1 == "Cells" {
+                    # Create clean metric name
+                    metric = $5
+                    if ($3 != "" && $4 != "") {
+                        metric = $3 " " $4 " " $5
+                    } else if ($3 != "") {
+                        metric = $3 " " $5
+                    } else if ($4 != "") {
+                        metric = $4 " " $5
+                    }
+                    gsub(/^[ ]+|[ ]+$/, "", metric)  # trim spaces
+                    print sample "," metric "," $6
+                }' "$metrics_file" >> "$temp_dir/sample_metrics.csv"
+            fi
+        fi
+    done
 done
+
+# Get unique metrics for header
+cut -d',' -f2 "$temp_dir/sample_metrics.csv" | sort -u > "$temp_dir/unique_metrics.txt"
+
+# Create header
+echo -n "Sample" > combined_metrics.csv
+while IFS= read -r metric; do
+    echo -n ",\"$metric\"" >> combined_metrics.csv
+done < "$temp_dir/unique_metrics.txt"
+echo "" >> combined_metrics.csv
+
+# Create data rows
+for sample_dir in */; do
+    sample_name="${sample_dir%/}"
+
+    for subsample_dir in "${sample_dir}outs/per_sample_outs"/*/; do
+        if [ -d "$subsample_dir" ]; then
+            subsample_name=$(basename "$subsample_dir")
+            label="${sample_name}_${subsample_name}"
+
+            # Check if this sample has data
+            if grep -q "^$label," "$temp_dir/sample_metrics.csv"; then
+                echo -n "$label" >> combined_metrics.csv
+
+                # Create associative array for this sample
+                declare -A sample_data
+                while IFS=',' read -r sample metric value; do
+                    if [ "$sample" = "$label" ]; then
+                        sample_data["$metric"]="$value"
+                    fi
+                done < "$temp_dir/sample_metrics.csv"
+
+                # Output values in header order
+                while IFS= read -r metric; do
+                    if [ -n "${sample_data[$metric]}" ]; then
+                        echo -n ",\"${sample_data[$metric]}\"" >> combined_metrics.csv
+                    else
+                        echo -n "," >> combined_metrics.csv
+                    fi
+                done < "$temp_dir/unique_metrics.txt"
+                echo "" >> combined_metrics.csv
+
+                unset sample_data
+            fi
+        fi
+    done
+done
+
+echo "Sample-specific metrics saved to combined_metrics.csv"
+
+# Optional: Create separate library-level summary
+echo "Creating library summary..."
+first_sample=$(ls -d */ | head -n 1)
+first_metrics="${first_sample}outs/per_sample_outs/$(ls "${first_sample}outs/per_sample_outs" | head -n 1)/metrics_summary.csv"
+
+if [ -f "$first_metrics" ]; then
+    echo "Sample,Metric,Value" > library_summary.csv
+    for sample_dir in */; do
+        sample_name="${sample_dir%/}"
+        metrics_file="${sample_dir}outs/per_sample_outs/$(ls "${sample_dir}outs/per_sample_outs" | head -n 1)/metrics_summary.csv"
+
+        if [ -f "$metrics_file" ]; then
+            awk -F',' -v sample="$sample_name" '
+            NR > 1 && $1 == "Library" && $3 == "" && $4 == "" {
+                print sample "," $5 "," $6
+            }' "$metrics_file" >> library_summary.csv
+        fi
+    done
+    echo "Library-level metrics saved to library_summary.csv"
+fi
 
