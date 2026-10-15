@@ -1,0 +1,52 @@
+#!/bin/bash
+#BSUB -J vllm-qwen
+#BSUB -P acc_untreatedIBD
+#BSUB -q gpu
+#BSUB -n 4
+#BSUB -R "span[hosts=1] rusage[mem=16000]"
+#BSUB -R "h100nvl"
+#BSUB -gpu "num=1"
+#BSUB -W 2:00
+#BSUB -o /sc/arion/projects/untreatedIBD/vllm/logs/%J.stdout
+#BSUB -eo /sc/arion/projects/untreatedIBD/vllm/logs/%J.stderr
+#BSUB -L /bin/bash
+
+# ---- Paths (edit these) ----
+SIF=/sc/arion/projects/untreatedIBD/cache/images/apptainer/vllm-openai-v0.31.0-cu130.sif
+HF_HOME_DIR=/sc/arion/projects/untreatedIBD/cache/huggingface
+MODEL_DIR=$HF_HOME_DIR/hub/models--Qwen--Qwen3-Coder-30B-A3B-Instruct-FP8/snapshots/dcaee4d4dfc5ee71ad501f01f530e5652438fde0
+KEYFILE=$HOME/.vllm_key
+PORT=8000
+
+# ---- vLLM flags (toggle --enforce-eager here) ----
+VLLM_EXTRA_ARGS="--enforce-eager"
+
+# ---- Environment ----
+ulimit -n 65536          # fixes the "Found ulimit of 20000" warning
+mkdir -p /sc/arion/projects/untreatedIBD/vllm/logs
+
+echo "=== Job ${LSB_JOBID} starting on $(hostname) at $(date) ==="
+echo "GPU: $(nvidia-smi --query-gpu=name,memory.total --format=csv,noheader)"
+
+ml apptainer
+ml proxies
+
+# ---- Launch vLLM ----
+apptainer run --nv \
+  -B /sc/arion \
+  --env HF_HOME=$HF_HOME_DIR \
+  --env HF_HUB_OFFLINE=1 \
+  --env TRANSFORMERS_OFFLINE=1 \
+  --env VLLM_LOGGING_LEVEL=INFO \
+  $SIF \
+  $MODEL_DIR \
+  --served-model-name qwen3-coder-30b \
+  --host 127.0.0.1 \
+  --port $PORT \
+  --api-key "$(cat $KEYFILE)" \
+  --max-model-len 131072 \
+  --enable-auto-tool-choice \
+  --tool-call-parser qwen3_xml \
+  $VLLM_EXTRA_ARGS
+
+echo "=== Job ${LSB_JOBID} exiting at $(date) ==="
