@@ -1,0 +1,24 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "minerva/qwen3-coder-30b",
+  "providers": {
+    "minerva": {
+      "name": "Minerva vLLM",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://localhost:8000/v1",
+        "apiKey": "{file:~/.vllm_key}"
+      },
+      "models": {
+        "qwen3-coder-30b": {
+          "name": "Qwen3 Coder 30B-A3B (FP8)",
+          "limit": {
+            "context": 131072,
+            "output": 32768,
+            "input": 98304
+          }
+        }
+      }
+    }
+  }
+}
