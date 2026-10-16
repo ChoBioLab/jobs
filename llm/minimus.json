@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "minimus/qwen3-coder-14b",
+  "providers": {
+    "minimus": {
+      "name": "Minimus Local vLLM",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://localhost:8001/v1",
+        "apiKey": "{file:~/.minimus_vllm_key}"
+      },
+      "models": {
+        "qwen3-coder-14b": {
+          "name": "Qwen3 Coder 14B-A3B (FP8)",
+          "limit": {
+            "context": 131072,
+            "output": 32768,
+            "input": 98304
+          },
+          "temperature": 0.7,
+          "topP": 0.9
+        },
+        "qwen3-coder-7b": {
+          "name": "Qwen3 Coder 7B-A3B (FP8)",
+          "limit": {
+            "context": 131072,
+            "output": 32768,
+            "input": 98304
+          },
+          "temperature": 0.7,
+          "topP": 0.9
+        }
+      }
+    }
+  }
+}

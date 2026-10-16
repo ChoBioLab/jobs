@@ -1,66 +1,91 @@
-# Minerva Coding Agent — Team Guide
+# Minerva Coding Agent — Team Setup
 
-A private AI coding assistant for the Untreated IBD group. It runs **entirely
-inside Minerva** and is used through [OpenCode](https://opencode.ai). Because
-nothing leaves the cluster, it is approved for work involving sensitive patient
-data.
+Private coding-LLM access for the Untreated IBD group, running entirely inside
+MSSM's Minerva HPC cluster. Verified working end-to-end (2026-10-07).
 
-**Read only the part you need:**
-
-| You are…                                             | Read                                     |
-| ---------------------------------------------------- | ---------------------------------------- |
-| **A user** who just wants to code with the assistant | [Part 1](#part-1--using-the-assistant)   |
-| **An operator** who starts/maintains the server      | [Part 2](#part-2--operating-the-server)  |
-| Looking for a specific setting or error              | [Part 3 — Reference](#part-3--reference) |
+**One harness, two tiers.** Everyone uses [OpenCode](https://opencode.ai); only
+the endpoint changes based on data sensitivity.
 
 ---
 
-## ⏳ The one thing everyone gets wrong
+## TL;DR
 
-**The server takes several minutes to start, and the model appears in OpenCode
-even when the server is dead.**
+```bash
+# 1. Submit the model server (once per walltime window)
+bsub < vllm/vllm-qwen.lsf
+bjobs -w                                  # note the EXEC_HOST
 
-Two consequences:
+# 2. Authenticate ONCE (MFA), hold the channel open
+ssh -MNf -o ControlPersist=8h minerva
 
-1. **After a job starts, wait.** vLLM loads ~30 GB of weights from shared
-   storage. The network port does **not** open until the log prints
-   `Application startup complete`. Connecting too early gives
-   `Connection refused` — that is normal, not a bug. Wait and retry.
-2. **Seeing the model in OpenCode proves nothing.** OpenCode's model list comes
-   from its _config file_, not from the server. Always verify with the `curl`
-   check below before assuming the connection is live.
+# 3. Tunnel to the compute node (no MFA prompt)
+ssh -N -L 8000:localhost:8000 tastac01@<EXEC_HOST>
+
+# 4. Verify, then use
+curl -s http://localhost:8000/v1/models \
+  -H "Authorization: Bearer $(cat ~/.vllm_key)" | python3 -m json.tool
+export MINERVA_VLLM_KEY=$(cat ~/.vllm_key)
+opencode
+```
 
 ---
 
-# Part 1 — Using the assistant
+## 1. Architecture
 
-For everyone. Three steps: set up once, connect daily, code.
+| | **Tier 1 — Sensitive** | **Tier 2 — General** |
+|---|---|---|
+| **Use for** | Patient data, PHI, anything under IRB | Public code, docs, non-sensitive scripts |
+| **Endpoint** | Self-hosted vLLM on Minerva GPU nodes | Institution-approved hosted service |
+| **Data leaves cluster?** | **No — never** | Approved only |
+| **Config file** | `opencode.json` (this repo) | `.opencode/opencode.hosted.json` |
 
-## 1.1 One-time setup
+**Rule of thumb:** if you have to think about whether it's sensitive, use Tier 1.
 
-### a) Install OpenCode (v2)
+### Request path
 
-Follow the instructions at [opencode.ai](https://opencode.ai). Confirm the
-version — this guide targets **v2**:
-
-```bash
-opencode --version
+```
+OpenCode ──HTTP──▶ localhost:8000 ──[SSH tunnel]──▶ login node ──▶ compute node:8000 ──▶ vLLM
+ (laptop)              (local socket)              (MFA happened here)     (loopback only)
 ```
 
-### b) Get the API key
+**OpenCode never speaks SSH.** It talks plain HTTP to `localhost:8000`. Port 8000
+is vLLM's HTTP port, not an SSH port. MFA is consumed once, by the tunnel — never
+by OpenCode.
 
-An operator will place the shared key at `~/.vllm_key` on Minerva. Copy it to
-your laptop, or ask the operator for it. It must exist on **your laptop** as
-`~/.vllm_key`:
+---
 
-```bash
-# Verify it exists and is non-empty:
-test -s ~/.vllm_key && echo "key present"
-```
+## 2. Modular Deployment System
 
-### c) Add your SSH config
+This system supports multiple deployment environments and GPU resources for optimal resource utilization:
 
-Append this to `~/.ssh/config` on your laptop:
+### Environments
+1. **Minerva HPC Cluster** - High-performance computing with H100 NVLink, L40S, and B200 GPUs
+2. **Minimus Local Instance** - Always-on local vLLM instance with A6000 GPU
+3. **Development Environment** - Local testing environment
+
+### GPU Selection Priority
+1. **A6000 (Minimus)** - Always available, ideal for daily work
+2. **L40S** - High availability, balanced performance
+3. **H100 NVLink** - Highest performance, when available
+4. **B200** - Reserved for critical workloads
+
+### Model Pairings
+| GPU Type | Recommended Models | Use Case |
+|----------|-------------------|----------|
+| A6000 | Qwen3-Coder-7B-A3B, Qwen3-Coder-14B-A3B | Daily work, light analysis |
+| L40S | Qwen3-Coder-14B-A3B, Qwen3-Coder-7B-A3B | General purpose |
+| H100 NVLink | Qwen3-Coder-30B-A3B, Qwen3-Coder-14B-A3B | Heavy analysis, code generation |
+
+---
+
+## 3. Prerequisites
+
+- Minerva account with the `acc_untreatedIBD` allocation.
+- VPN + F5 for off-campus access (a tunnel alone will **not** connect off-campus).
+- OpenCode **v2** installed locally.
+- SSH access to `minerva.hpc.mssm.edu`.
+
+### One-time SSH config
 
 ```
 Host minerva
@@ -69,266 +94,32 @@ Host minerva
     ControlMaster auto
     ControlPath ~/.ssh/cm-%C
     ControlPersist 8h
-    ServerAliveInterval 30
-    ServerAliveCountMax 3
+
+Host lg* li*
+    User tastac01
+    ProxyJump minerva
 ```
 
-- **Always type `minerva`, never the full `minerva.hpc.mssm.edu`.** The settings
-  above live in the `Host minerva` block and will _not_ apply if you use the
-  full hostname — that is the #1 cause of being asked for MFA over and over.
-- `ControlPersist 8h` keeps your MFA session alive so you authenticate **once**
-  per work session, not once per command.
-
-### d) Install the OpenCode config
-
-Copy `opencode.json` from this repo into **either**:
-
-- the project you're working in (recommended — travels with the code), or
-- `~/.config/opencode/opencode.json` (applies everywhere)
-
-The file must be named exactly `opencode.json` (or `.opencode/opencode.json`).
-**`.opencode.json` is not read by OpenCode.**
-
-### e) Attach the credential (once per machine)
-
-OpenCode needs to be told the key. Do **both** of these:
-
-**1. Config-level (already in `opencode.json`):** the provider reads the key
-straight from the file —
-
-```json
-"settings": {
-  "baseURL": "http://localhost:8000/v1",
-  "apiKey": "{file:~/.vllm_key}"
-}
-```
-
-**2. Belt-and-braces:** inside OpenCode, run
-
-```
-/connect   →  select "minerva"  →  paste the contents of ~/.vllm_key
-```
-
-Then confirm:
-
-```bash
-opencode auth list          # should list "minerva"
-```
-
-> **Why both?** OpenCode does _not_ read shell environment variables from a
-> `.env` file, and a variable set in your terminal may not reach the OpenCode
-> process. `{file:...}` is deterministic (read at request time), and a stored
-> `/connect` credential takes precedence over everything. Using both removes
-> the entire class of "Unauthorized" surprises.
-
-## 1.2 Daily routine
-
-### Step 1 — Is the server running?
-
-Ask an operator, or check yourself:
-
-```bash
-ssh minerva "bjobs -w | grep vllm-qwen"
-```
-
-You want a line with **`RUN`**. If it says `PEND`, it's queued. If there's no
-line, the server is down — ping an operator.
-
-### Step 2 — Connect (open the tunnel)
-
-**Easiest — use the script** (keep the terminal open while you work):
-
-```bash
-./minerva-connect.sh
-```
-
-It finds the server automatically, authenticates you (password + MFA), and opens
-the tunnel. If auto-detection fails, pass the node name:
-
-```bash
-./minerva-connect.sh lg05e17
-```
-
-**Or do it by hand** (this is the verified-working sequence — three commands):
-
-```bash
-# 1. Authenticate to the login node once. Prompts: Sinai password + Azure MFA.
-ssh -MNf -o ControlPersist=8h minerva
-
-# 2. Open a login-node session that forwards port 8000 to your laptop.
-ssh -L 8000:localhost:8000 minerva
-
-# 3. NOW, from inside that login-node session, forward onward to the compute
-#    node. Prompts: your compute-node password (this is the SECOND password).
-ssh -L 8000:localhost:8000 tastac01@<EXEC_HOST>
-```
-
-Keep both sessions open. The chain is:
-
-```
-laptop:8000  →  login node:8000  →  compute node:8000  →  vLLM
-```
-
-> **Why two hops, and why two passwords?** The tunnel has to be authenticated
-> where each hop is created. The laptop→login hop uses your Sinai password +
-> MFA; the login→node hop is authenticated _by the login node_ and asks for the
-> compute-node password. This is expected. A single `ProxyJump` command does
-> **not** reproduce it, because ProxyJump connects from your laptop, not from
-> the login node — which is why it failed before.
-
-### Step 3 — Verify before opening OpenCode
-
-```bash
-curl -s http://localhost:8000/v1/models \
-  -H "Authorization: Bearer $(cat ~/.vllm_key)" | head
-```
-
-You should see `"id":"qwen3-coder-30b"` and `"max_model_len":131072`.
-
-- **JSON returned** → you're good. Go to Step 4.
-- **Nothing / `Expecting value: line 1 column 1`** → the tunnel or server is
-  down. Do **not** open OpenCode yet; it will just fail. See
-  [Part 3](#part-3--reference).
-
-### Step 4 — Open OpenCode
-
-```bash
-opencode
-```
-
-Select **Minerva vLLM → Qwen3 Coder 30B** (it's the default) and start typing.
-
-## 1.3 If something goes wrong
-
-| What you see                                                 | What to do                                                                             |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| OpenCode shows the model but every prompt fails              | Run the Step 3 curl. If it fails, the tunnel is down — reconnect.                      |
-| `Unauthorized` on prompts                                    | Run `/connect` again in OpenCode, and confirm `~/.vllm_key` exists.                    |
-| Asked for MFA repeatedly                                     | You used the full hostname. Use `ssh minerva` exactly.                                 |
-| `Connection refused` right after starting                    | The server is still loading. Wait a few minutes and retry.                             |
-| `channel 3: open failed: connect failed: Connection refused` | The server isn't listening yet, or you're on the wrong node. Confirm with an operator. |
-| Anything else                                                | Ping an operator with the exact error text.                                            |
+- `%C` keeps the control path under the 104/108-byte Unix socket limit.
+- **Always use the alias `minerva`, never the FQDN** — the ControlMaster settings
+  live in the `Host minerva` block and will *not* apply to
+  `minerva.hpc.mssm.edu`. Using the FQDN is the #1 cause of repeated MFA prompts.
+- The `lg* li*` block sets the correct username and jump host for compute nodes,
+  so you don't have to type `tastac01@` each time.
 
 ---
 
-# Part 2 — Operating the server
-
-For team members comfortable with Minerva/LSF. Everyone else can skip this.
-
-## 2.1 Start the server
-
-```bash
-bsub < vllm/vllm-qwen.lsf
-bjobs -w                    # note the EXEC_HOST column once state is RUN
-```
-
-## 2.2 Wait for it to actually serve
-
-This is the step that trips people up. A `RUN` job does **not** mean the model is
-ready. The port opens only at the end of startup:
-
-```bash
-# Watch the log until you see these two lines:
-tail -f /sc/arion/projects/untreatedIBD/vllm/logs/<JOBID>.stdout
-#   INFO: Application startup complete.
-#   INFO: Uvicorn running on http://127.0.0.1:8000
-```
-
-Confirm the socket exists **on the compute node**:
-
-```bash
-ssh tastac01@<EXEC_HOST> "ss -tlnp | grep 8000"
-```
-
-A `RUN` job with no listener means startup is still in progress — or it crashed
-(see troubleshooting). Budget **several minutes** per restart; the whole team's
-tunnel depends on the node staying up.
-
-## 2.3 GPU sizing — H100 vs L40S
-
-The job must be sized to the GPU it actually lands on. `--max-model-len` drives
-KV-cache memory, and the two cards differ a lot:
-
-| GPU      | VRAM  | `--max-model-len` | Extra flags needed                                   |
-| -------- | ----- | ----------------- | ---------------------------------------------------- |
-| **H100** | 80 GB | `131072` (128K)   | none                                                 |
-| **L40S** | 48 GB | `131072` (128K)   | `--kv-cache-dtype fp8 --gpu-memory-utilization 0.92` |
-| **L40S** | 48 GB | `65536` (64K)     | none (but update `opencode.json`)                    |
-
-If 128K won't fit on the L40S, vLLM fails at KV-cache allocation with
-`No available memory for the cache blocks`, leaving a `RUN` job with no listener.
-The fix is FP8 KV cache (halves the cache) or a smaller window.
-
-> **If you reduce `--max-model-len`, you MUST update `opencode.json` to match**
-> (`limit.context`), or every prompt overflows. See [Part 3](#part-3--reference).
-
-**Match the resource request to the hardware.** The script currently requests
-`h100nvl`; if you intend L40S, request it explicitly. Confirm the exact selector
-string for your queue with `bhosts -l` or your cluster docs — a mismatch means
-the job can land somewhere you didn't size for.
-
-## 2.4 Walltime & resubmission
-
-> ⚠️ **The script currently uses `-W 2:00` (two hours).** That is a testing
-> value. For a team endpoint it means the server dies mid-session and every
-> user's tunnel breaks. Raise it to the queue maximum before rollout:
-
-```bash
-bqueues -l gpu | grep -i 'runlimit\|max'
-```
-
-A self-resubmit trap on clean exit keeps the service alive across windows. When
-the job moves, **the `EXEC_HOST` changes** — tell the team to re-run
-`./minerva-connect.sh`, which re-detects it.
-
-## 2.5 Updating the model
-
-1. Download the new checkpoint into `HF_HOME`.
-2. Verify no `.incomplete` files and check shard sizes.
-3. Update `MODEL_DIR` in `vllm-qwen.lsf`.
-4. **Keep `--served-model-name qwen3-coder-30b` unchanged** — client config then
-   needs no edit.
-5. `bkill` the old job, `bsub` the new one, announce the new node.
-
-## 2.6 Monitoring
-
-```bash
-bjobs -w                 # jobs + exec hosts
-bpeek <JOBID>            # live tail of stdout/stderr
-bqueues -u $USER         # queue load
-```
-
----
-
-# Part 3 — Reference
-
-## 3.1 Architecture
-
-|                          | **Tier 1 — Sensitive**                | **Tier 2 — General**                     |
-| ------------------------ | ------------------------------------- | ---------------------------------------- |
-| **Use for**              | Patient data, PHI, anything under IRB | Public code, docs, non-sensitive scripts |
-| **Endpoint**             | Self-hosted vLLM on Minerva           | Institution-approved hosted service      |
-| **Data leaves cluster?** | **No — never**                        | Approved only                            |
-| **Config file**          | `opencode.json`                       | `.opencode/opencode.hosted.json`         |
-
-If you have to think about whether it's sensitive, use Tier 1.
-
-```
-OpenCode ──HTTP──▶ laptop:8000 ══SSH══▶ login:8000 ══SSH══▶ node:8000 ──▶ vLLM
-   (your machine)      (hop 1: MFA)   (hop 2: node pw)      (loopback only)
-```
-
-**OpenCode never speaks SSH.** It talks plain HTTP to `localhost:8000`. Port
-8000 is vLLM's HTTP port, not an SSH port. MFA is consumed by the tunnel, never
-by OpenCode.
-
-## 3.2 Repository layout
+## 4. Repository layout
 
 ```
 .
 ├── README.md
-├── opencode.json              # OpenCode v2 config → Tier 1 (sensitive)
-├── minerva-connect.sh         # one-command tunnel
+├── opencode.json              # OpenCode v2 config → Current active environment
+├── minerva-llm-connect.sh     # Connect to Minerva HPC
+├── switch-env.sh              # Switch between environments
+├── minerva.json               # Minerva HPC configuration
+├── minimus.json               # Minimus local instance configuration
+├── dev.json                   # Development environment configuration
 └── vllm/
     ├── vllm-qwen.lsf          # LSF job that hosts the model
     ├── logs/                  # job stdout/stderr (gitignored)
@@ -337,19 +128,21 @@ by OpenCode.
 
 **Never commit:** API keys, `auth.json`, `*.sif`, model weights, logs.
 
-## 3.3 OpenCode config (v2 format)
+---
 
-> **The format changed between v1 and v2.** This repo targets **v2**. Using v1
-> field names gives "provider appears but no models / 401" errors.
+## 5. OpenCode Configuration (v2 format)
 
-| Setting          | v1         | **v2 (use this)** |
-| ---------------- | ---------- | ----------------- |
-| Provider map key | `provider` | **`providers`**   |
-| Runtime package  | `npm`      | **`package`**     |
-| Options map      | `options`  | **`settings`**    |
+> **The config format changed between v1 and v2.** This repo targets **v2**.
+> Using v1 field names produces "provider appears but no models / 401" errors.
+
+| Setting | **v1** | **v2 (use this)** |
+|---|---|---|
+| Provider map key | `provider` | **`providers`** |
+| Runtime package | `npm` | **`package`** |
+| Options map | `options` | **`settings`** |
+| Compatible runtime | `@ai-sdk/openai-compatible` | `@opencode/ai/providers/openai-compatible` |
 
 `opencode.json`:
-
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
@@ -357,10 +150,10 @@ by OpenCode.
   "providers": {
     "minerva": {
       "name": "Minerva vLLM",
+      "env": ["MINERVA_VLLM_KEY"],
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
-        "baseURL": "http://localhost:8000/v1",
-        "apiKey": "{file:~/.vllm_key}"
+        "baseURL": "http://localhost:8000/v1"
       },
       "models": {
         "qwen3-coder-30b": {
@@ -377,28 +170,135 @@ by OpenCode.
 }
 ```
 
-- `baseURL` must end at `/v1` — no `/chat/completions`, no doubled `/v1`.
-- `{file:~/.vllm_key}` reads the key at request time. This is more reliable than
-  an environment variable, which the OpenCode process may not inherit.
+`baseURL` must end in `/v1` and nothing more — no `/chat/completions`, no
+duplicated `/v1`.
 
-## 3.4 Credentials
+### Required: attach the credential with `/connect`
 
-Precedence: **stored (`/connect`) → env var → `settings.apiKey`**.
+**The `env` field alone is not sufficient.** Check with `opencode auth list` —
+if it says "No authenticated integrations", prompts will 401 even though the key
+is valid. Attach it explicitly:
 
-The robust setup is `{file:...}` in config **plus** a one-time `/connect`.
-Because a stored credential wins, a stale one must be replaced (re-run
-`/connect`), not left in place.
-
-Check what OpenCode sees:
-
-```bash
-opencode auth list          # should list "minerva"
+```
+/connect   →  select "minerva"  →  paste contents of ~/.vllm_key
 ```
 
-## 3.5 Tool calling (required)
+Credential precedence: **stored (`/connect`) > env var > `settings.apiKey`**.
+A stored credential is required for reliable operation; **each developer runs
+`/connect` once per machine** (credentials are local, never in the repo).
+
+Verify:
+
+```bash
+opencode auth list                                    # should show minerva
+curl -s http://localhost:8000/v1/models \
+  -H "Authorization: Bearer $(cat ~/.vllm_key)" | python3 -m json.tool
+```
+
+---
+
+## 6. Environment Switching
+
+Use the `switch-env.sh` script to easily switch between different deployment environments:
+
+```bash
+# Switch to Minerva HPC with 30B model
+./switch-env.sh --environment=minerva --model=qwen3-coder-30b
+
+# Switch to Minimus with 14B model
+./switch-env.sh --environment=minimus --model=qwen3-coder-14b --gpu=a6000
+
+# Show help
+./switch-env.sh --help
+```
+
+---
+
+## 7. Submitting the model server
+
+```bash
+bsub < vllm/vllm-qwen.lsf
+bjobs -w                     # wait for RUN; copy the EXEC_HOST column
+bpeek <JOBID>                # watch for "Application startup complete"
+```
+
+**The `EXEC_HOST` changes on every resubmission.** Always re-read it from
+`bjobs -w`; a stale hostname produces "Connection refused."
+
+---
+
+## 8. Connecting
+
+### Authenticate once
+```bash
+ssh -MNf -o ControlPersist=8h minerva     # prompts for password + Azure MFA
+ssh -O check minerva                      # "Master running (pid=...)" = good
+```
+
+### Open the tunnel
+```bash
+ssh -N -L 8000:localhost:8000 tastac01@<EXEC_HOST>
+```
+
+**Why the compute node directly, not the login node:** vLLM binds to
+`127.0.0.1` (loopback) on the compute node. A tunnel that makes the *login node*
+dial the compute node reaches the node's *network interface*, which a
+loopback-bound server refuses:
+
+```
+channel 2: open failed: connect failed: Connection refused
+```
+
+❌ Wrong with loopback binding:
+```bash
+ssh -N -L 8000:<EXEC_HOST>:8000 minerva
+```
+
+✅ Correct — lands on the compute node, reaches its own loopback:
+```bash
+ssh -N -L 8000:localhost:8000 tastac01@<EXEC_HOST>
+```
+
+### Verify (from your laptop, tunnel live)
+```bash
+curl -s http://localhost:8000/v1/models \
+  -H "Authorization: Bearer $(cat ~/.vllm_key)" | python3 -m json.tool
+```
+
+Expect `"id": "qwen3-coder-30b"` and `"max_model_len": 131072`. This is the exact
+path OpenCode uses — if this works, OpenCode will work.
+
+---
+
+## 9. Authentication & access model
+
+Two independent layers:
+
+| Layer | Protects | Mechanism |
+|---|---|---|
+| SSH to login node | Cluster access | Sinai password **+ Azure MFA** |
+| vLLM HTTP endpoint | Model access | **API key** (no MFA) |
+
+A `-L` tunnel forwards **exactly one port** — it does *not* grant shell or
+filesystem access. Reaching the endpoint requires: campus network (or VPN+F5) →
+MFA-authenticated SSH → the API key. Both locks must open.
+
+- **MFA is per-developer, per-connection.** Each person establishes their own
+  tunnel to the same node:8000. No shared credential.
+- **`ControlPersist` reuses your MFA session** — keep it finite (8h), and treat
+  the control socket (`~/.ssh/cm-*`) as a credential.
+- **`127.0.0.1` is node-scoped.** On a shared compute node, the API key is what
+  prevents other users on the same node from reaching the endpoint.
+- **Off-campus requires VPN + F5 first.** A tunnel alone will not connect.
+
+---
+
+## 10. Tool calling (required for agentic use)
 
 OpenCode is an agentic client — it sends `tool_choice: "auto"`, which vLLM
-**rejects** unless tool parsing was enabled at launch. Required flags:
+**rejects** unless tool-call parsing was enabled at launch.
+
+**Required flags in `vllm-qwen.lsf`:**
 
 ```
 --enable-auto-tool-choice
@@ -406,13 +306,13 @@ OpenCode is an agentic client — it sends `tool_choice: "auto"`, which vLLM
 ```
 
 Symptom if missing:
-
 ```
 Error: "auto" tool choice requires --enable-auto-tool-choice
 and --tool-call-parser to be set
 ```
 
-Definitive test (same shape OpenCode sends):
+**Verify after restart** (this is the definitive test — same request shape
+OpenCode sends):
 
 ```bash
 curl -s http://localhost:8000/v1/chat/completions \
@@ -429,105 +329,198 @@ curl -s http://localhost:8000/v1/chat/completions \
 
 The response must contain `"tool_calls"` and `"finish_reason": "tool_calls"`.
 
-## 3.6 Context window — keep both sides in sync
+---
 
-The model natively supports **256K**; we serve **128K** for VRAM margin.
+## 11. Context window: keep server and client in sync
 
-OpenCode requests up to **32000 output tokens** for custom providers. If the
-server window is smaller than input + 32000, every prompt overflows:
+The model natively supports **256K (262144) tokens**; we serve at **128K** for a
+comfortable VRAM margin.
+
+`vllm-qwen.lsf`:
+```
+--max-model-len 131072
+```
+
+OpenCode requests up to **32000 output tokens** for custom providers
+(`OPENCODE_OUTPUT_TOKEN_MAX = 32000`). If the server window is smaller than
+input + 32000, every prompt overflows:
 
 ```
 Error: This model's maximum context length is 32768 tokens. However, you
-requested 32000 output tokens ...
+requested 32000 output tokens and your prompt contains at least 769 input
+tokens ... Please reduce the length of the input prompt or the number of
+requested output tokens.
 ✗ Compaction: the compaction request cannot be reduced further ...
 ```
 
-Keep these matched in `opencode.json`:
+**Always keep the two sides matched** in `opencode.json`:
 
-| Field           | Value    | Must equal         |
-| --------------- | -------- | ------------------ |
-| `limit.context` | `131072` | `--max-model-len`  |
-| `limit.output`  | `32768`  | Model's max output |
-| `limit.input`   | `98304`  | `context − output` |
+| Field | Value | Must equal |
+|---|---|---|
+| `limit.context` | `131072` | `--max-model-len` |
+| `limit.output` | `32768` | Model's max output |
+| `limit.input` | `98304` | `context − output` |
 
-**If you change `--max-model-len`, change `limit.context` (and `input`) to
-match.** Setting `input` explicitly matters: without it OpenCode derives a tiny
-usable budget and compaction breaks.
+Setting `input` explicitly matters: without it, OpenCode derives usable context
+as `context − maxOutputTokens()`, which can collapse to a tiny budget and break
+compaction. Declaring it gives long agentic sessions a correct, large budget.
 
-## 3.7 Model ID convention
+**Sizing reference (H100 80GB):**
 
-| Layer                               | Value                            | Changes when…         |
-| ----------------------------------- | -------------------------------- | --------------------- |
-| Served name (`--served-model-name`) | `qwen3-coder-30b`                | We change the _model_ |
-| Checkpoint path                     | `/sc/arion/.../snapshots/<rev>/` | We update weights     |
-| Provider ID                         | `minerva`                        | Almost never          |
-| OpenCode model ref                  | `minerva/qwen3-coder-30b`        | Almost never          |
+| `--max-model-len` | Approx. VRAM | Notes |
+|---|---|---|
+| 32768 | ~38 GB | Too small — overflow errors |
+| **131072** | **~50 GB** | **Current default — recommended** |
+| 262144 | ~63 GB | Native max; tighter but viable |
 
-**Never reference a snapshot hash in `opencode.json` or docs.** Pin it in the
-job script only.
+The 32000 output cap is a **ceiling, not a floor** — `min(limit.output, 32000)`.
+You can lower it, but raising it requires `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX`.
+The **server-side window is the reliable lever**, since it works regardless of
+client config quirks.
 
-## 3.8 Troubleshooting
+---
 
-| Symptom                                    | Cause                                    | Fix                                                                                       |
-| ------------------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `Bus error` during weight load             | Truncated shards / weights in home quota | Check for `.incomplete`; set `HF_HOME` to project storage                                 |
-| Weights download to `~/.cache`             | `HF_HOME` not set                        | Pass `--env HF_HOME=...`                                                                  |
-| `Engine core initialization failed … {}`   | Native crash in engine child             | Check stderr + `dmesg -T \| grep Xid`; try `--enforce-eager`                              |
-| Crash mid-`Capturing CUDA graphs`          | CUDA-graph capture fault                 | `--enforce-eager`                                                                         |
-| `No available memory for the cache blocks` | Context too large for the GPU            | Add `--kv-cache-dtype fp8` + raise `--gpu-memory-utilization`, or lower `--max-model-len` |
-| `Failed to infer device type`              | GPU not visible                          | Add `--nv` to `apptainer`                                                                 |
-| `libnvrtc.so.13: cannot open…`             | Broken `cu129` image                     | Use the `cu130` image                                                                     |
-| `Found ulimit of 20000`                    | fd limit too low                         | `ulimit -n 65536`                                                                         |
-| MFA prompt on every ssh                    | Using FQDN, not alias                    | Use `ssh minerva`; check `ssh -G minerva \| grep -i control`                              |
-| `(cw@node) Password:`                      | Wrong username on final hop              | Spell out `tastac01@<EXEC_HOST>`                                                          |
-| `channel N: open failed … refused`         | Nothing listening at the far node        | Confirm job is `RUN`, on the right node, and past startup                                 |
-| `Connection refused` right after submit    | Server still loading                     | Wait for `Application startup complete`                                                   |
-| `Expecting value: line 1 column 1`         | `curl` got an empty body                 | Drop `-s` or add `-v`; test on the compute node first                                     |
-| Model missing in OpenCode                  | v1 config fields                         | Use `providers`/`package`/`settings`                                                      |
-| Model listed but prompt 401s               | No credential attached                   | `/connect` → minerva; check `~/.vllm_key`                                                 |
-| `--enable-auto-tool-choice` error          | Tool parsing not enabled                 | Add the two flags; restart                                                                |
-| Tool calls absent, text only               | Wrong parser                             | Use `qwen3_xml` (fallback `qwen3_coder`)                                                  |
-| Context-length / compaction error          | Client request exceeds server window     | Match `limit.context` to `--max-model-len`                                                |
-| `ECONNRESET` on prompts                    | Usually a dead endpoint                  | Run the Step-3 curl; if it fails, it's the tunnel                                         |
+## 12. Model ID convention
 
-### Isolating a failure
+**The served name is a stable alias; the checkpoint path is not.**
 
-Test each layer separately, in order:
+| Layer | Value | Changes when… |
+|---|---|---|
+| Served name (`--served-model-name`) | `qwen3-coder-30b` | We change the *model* |
+| Checkpoint path | `/sc/arion/.../snapshots/<rev>/` | We update weights |
+| Provider ID | `minerva` | Almost never |
+| OpenCode model ref | `minerva/qwen3-coder-30b` | Almost never |
 
-| Layer       | Where        | Command                                                                          |
-| ----------- | ------------ | -------------------------------------------------------------------------------- |
-| 1. Server   | compute node | `curl -s localhost:8000/v1/models`                                               |
-| 2. Tunnel   | laptop       | `curl -s localhost:8000/v1/models -H "Authorization: Bearer $(cat ~/.vllm_key)"` |
-| 3. OpenCode | laptop       | `opencode` → `/models`                                                           |
+**Never reference a snapshot hash in `opencode.json` or docs.** Pin the hash in
+the job script only. A weight update then touches exactly one file.
 
-**Key diagnostic:** `ss -tlnp | grep 8000` on the **client** shows the _tunnel_
-(`ssh`); on the **server** it shows _vLLM_ (`vllm`). Don't confuse them.
+---
 
-## 3.9 Data handling & compliance
+## 13. Troubleshooting
 
-- **Tier 1 traffic never leaves the cluster.** Only your SSH tunnel crosses the
-  network.
-- **Do not change `--host` to `0.0.0.0`.** That exposes the endpoint to the whole
-  fabric.
-- **DeepSeek is prohibited** by internal policy.
+| Symptom | Cause | Fix |
+|---|---|---|
+| `Bus error` during weight load | Truncated shards / weights in home quota | Verify no `.incomplete` files; always set `HF_HOME` to project storage |
+| Weights download to `~/.cache` | `HF_HOME` not set | Pass `--env HF_HOME=...` |
+| `Engine core initialization failed … {}` | Native crash in engine child | Check stderr + `dmesg -T \| grep Xid`; try `--enforce-eager` |
+| Crash mid-`Capturing CUDA graphs` | CUDA-graph capture fault | `--enforce-eager` |
+| `Failed to infer device type` | GPU not visible | Add `--nv` to `apptainer` |
+| `libnvrtc.so.13: cannot open…` | Broken `cu129` image | Use the `cu130` image |
+| `Found ulimit of 20000` | fd limit too low | `ulimit -n 65536` |
+| MFA prompt on every ssh | Using FQDN, not alias | Use `ssh minerva`; check `ssh -G minerva \| grep -i control` |
+| `(cw@node) Password:` | Wrong username on final hop | Spell out `tastac01@<EXEC_HOST>` |
+| `channel 2: open failed … refused` | Login node dialing a loopback server | Tunnel to the compute node, not through the login node |
+| `Connection refused` (tunnel) | Stale `EXEC_HOST` | Re-read from `bjobs -w` |
+| `Expecting value: line 1 column 1` | `curl -s` hiding an empty-body error | Drop `-s` or add `-v`; test on the compute node first |
+| Model missing in OpenCode | v1 config fields | Use `providers`/`package`/`settings` |
+| Model listed but prompt 401s | No credential attached | `/connect` → minerva |
+| `--enable-auto-tool-choice` error | Tool parsing not enabled | Add the two flags; restart |
+| Tool calls absent, text only | Wrong parser | Use `qwen3_xml` (fallback `qwen3_coder`) |
+| Context-length / compaction error | Client output request exceeds server window | Match `limit.context` to `--max-model-len`; raise window |
+
+### Isolating failures
+
+Test each layer **separately**, in order:
+
+| Layer | Where | Command |
+|---|---|---|
+| 1. Server | compute node | `curl -s localhost:8000/v1/models` |
+| 2. Tunnel | laptop | `curl -s localhost:8000/v1/models -H "Authorization: Bearer $(cat ~/.vllm_key)"` |
+| 3. OpenCode | laptop | `opencode` → `/models` |
+
+**Key diagnostic:** `ss -tlnp | grep 8000` on the **client** shows the *tunnel*
+(`users:(("ssh",…))`); on the **server** it shows *vLLM*
+(`users:(("vllm",…))`). Don't confuse them.
+
+---
+
+## 14. Data handling & compliance
+
+- **Tier 1 traffic never leaves the cluster.** Weights, prompts, and responses
+  stay on Minerva; only your SSH tunnel crosses the network.
+- **Do not change `--host` to `0.0.0.0`.** That exposes an endpoint to every node
+  on the fabric.
+- **DeepSeek is prohibited** by internal policy — do not add it to either tier.
 - **Logs** may contain prompt text. `vllm/logs/` is gitignored; don't copy logs
   off-cluster if they touched sensitive data.
 - **Weights** live in project storage (`/sc/arion/projects/`), never `/scratch`
   (14-day purge).
 
-## 3.10 Known limitations
+---
 
-- **V100 nodes cannot serve** — vLLM needs compute capability ≥ 7.5.
-- **FP8 is native only on Ada/Hopper/Blackwell** (L40S, H100). On A100/A6000 it
-  runs weight-only (W8A16) — use AWQ/BF16 there.
-- **`--enforce-eager` costs throughput** — a stability workaround; revisit once
-  FP8 is confirmed stable.
-- **One GPU = one server.** No tensor parallelism; the 30B-A3B fits on one H100
-  or one L40S (with FP8 KV cache at 128K).
+## 15. Operations
+
+### Walltime & resubmission
+
+The job dies at its `-W` walltime, taking the endpoint with it. **Note: the
+current script uses `-W 2:00`, which is too short for team use** — raise it and
+confirm the `gpu` queue ceiling:
+
+```bash
+bqueues -l gpu | grep -i 'runlimit\\|max'
+```
+
+A self-resubmit trap on clean exit keeps the service alive across windows.
+
+### Monitoring
+
+```bash
+bjobs -w              # your jobs + exec hosts
+bpeek <JOBID>         # live tail
+bqueues -u $USER      # queue load
+```
+
+### Updating the model
+
+1. Download the new checkpoint to `HF_HOME`.
+2. Verify no `.incomplete` files; check shard sizes.
+3. Update `MODEL_DIR` in `vllm-qwen.lsf`.
+4. Keep the same `--served-model-name` so client config is unchanged.
+5. `bkill` the old job; submit the new one; re-read `EXEC_HOST`.
 
 ---
 
-## Questions / changes
+## 16. Known limitations
+
+- **V100 nodes cannot serve** — vLLM requires compute capability ≥ 7.5.
+- **FP8 is native only on Ada/Hopper/Blackwell.** On A100/A6000 it runs
+  weight-only (W8A16). Use AWQ/BF16 for Ampere serving if performance matters.
+- **`--enforce-eager` costs throughput.** It's a stability workaround; revisit
+  once FP8 is confirmed stable (try `--max-cudagraph-capture-size 64`).
+- **One GPU = one server.** No tensor parallelism; 30B-A3B fits on one H100.
+
+---
+
+## 17. Modular Deployment Usage
+
+### Switching Between Environments
+
+Use the `switch-env.sh` script to easily switch between different deployment environments:
+
+```bash
+# Switch to Minerva HPC with 30B model
+./switch-env.sh --environment=minerva --model=qwen3-coder-30b
+
+# Switch to Minimus with 14B model
+./switch-env.sh --environment=minimus --model=qwen3-coder-14b --gpu=a6000
+
+# Switch to Development environment
+./switch-env.sh --environment=dev --model=qwen3-coder-14b
+```
+
+### Environment-Specific Recommendations
+
+#### For Bioinformatics Team:
+- Heavy analysis workloads: Use Minerva HPC with H100 NVLink and Qwen3-Coder-30B-A3B
+- General development: Use L40S with Qwen3-Coder-14B-A3B
+
+#### For Biologists:
+- Light analysis and rapid prototyping: Use Minimus A6000 with Qwen3-Coder-14B-A3B
+- Quick scripting: Use L40S with Qwen3-Coder-7B-A3B
+
+---
+
+## 18. Questions / changes
 
 Open a PR rather than configuring by hand — the point of repo-level config is
-that the whole team gets identical behavior from a `git pull`.
+that the whole team gets the same behavior from a `git pull`.
