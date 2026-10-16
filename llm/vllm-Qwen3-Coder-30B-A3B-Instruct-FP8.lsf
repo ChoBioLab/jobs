@@ -2,10 +2,11 @@
 #BSUB -J vllm-qwen
 #BSUB -P acc_untreatedIBD
 #BSUB -q gpu
-#BSUB -n 4
-#BSUB -R "span[hosts=1] rusage[mem=16000]"
-#BSUB -R "h100nvl"
-#BSUB -gpu "num=1"
+#BSUB -n 2
+#BSUB -R span[hosts=1] 
+#BSUB -R rusage[mem=16GB]
+#BSUB -R l40s
+#BSUB -gpu num=1
 #BSUB -W 2:00
 #BSUB -o /sc/arion/projects/untreatedIBD/vllm/logs/%J.stdout
 #BSUB -eo /sc/arion/projects/untreatedIBD/vllm/logs/%J.stderr
@@ -45,6 +46,7 @@ apptainer run --nv \
   --port $PORT \
   --api-key "$(cat $KEYFILE)" \
   --max-model-len 131072 \
+  --kv-cache-dtype fp8 \
   --enable-auto-tool-choice \
   --tool-call-parser qwen3_xml \
   $VLLM_EXTRA_ARGS
